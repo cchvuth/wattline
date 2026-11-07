@@ -140,7 +140,8 @@ flutter build ios --simulator --debug
 
 Every push to master builds the APKs on GitHub Actions
 (`.github/workflows/apk.yml`), after analyze and the tests, and publishes
-them as a pre-release (`build-N`): `Tesla-Dash-Android.apk` for most
+them as a pre-release (`build-N`); a version tag (`v1.0.0`) publishes a
+full release. Each has `Tesla-Dash-Android.apk` for most
 phones (64-bit ARM), `Tesla-Dash-Android-older-phones.apk` for any phone.
 The tests and the two builds run side by side. Release builds are signed with the debug key: store the Mac's
 `~/.android/debug.keystore`, base64, as the `DEBUG_KEYSTORE` secret, and the
