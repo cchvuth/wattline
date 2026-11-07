@@ -40,7 +40,7 @@ Panda _seen(Panda o) => o
 
 final _shots = <String, (Size, Panda Function())>{
   // A dark November morning: ice on the bridge, a cold pack, a full car
-  // recirculating, a third-row seat unbuckled.
+  // recirculating, a third-row seat unbuckled, signalling right mid-flash.
   'cold-morning': (const Size(823.5, 384), () {
     final o = _car()
       ..speed = 38
@@ -52,6 +52,8 @@ final _shots = <String, (Size, Panda Function())>{
       ..rangeMi = 193
       ..speedLimit = 50
       ..autopilot = 'AP READY'
+      ..indR = true
+      ..blinkLit = true
       ..lowBeam = true
       ..outsideC = -1.5
       ..washerLow = true
