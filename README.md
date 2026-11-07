@@ -7,6 +7,8 @@ Juniper (2025 on), 5 or 7 seats, rear- or all-wheel drive; tested on a
 
 ![The dash on a cold morning: signalling right, ice on the road, a cold pack capping regen, a third-row seat unbuckled](docs/screenshots/cold-morning.png)
 
+![A 15 s drive (demo data): pulling away to 60 km/h, a right turn on regen with the path lines, then the brake](docs/screenshots/drive.gif)
+
 It shows:
 
 - speed in a ring, with front and rear motor power, and in red the regen
@@ -48,7 +50,10 @@ It shows:
 
 The screenshots are demo data at the phone's own resolution, rendered by
 `test/dash_shot_test.dart`: `DASH_SHOT=$PWD/docs/screenshots flutter test
-test/dash_shot_test.dart` redraws them.
+test/dash_shot_test.dart` redraws them. The drive is `test/drive_video_test.dart`
+(`DRIVE_VIDEO=<dir>` writes its frames), made into a GIF by
+`swift tools/frames_to_gif.swift <dir> docs/screenshots/drive.gif 10 800 2`
+(or an MP4 by `tools/frames_to_mp4.swift`).
 
 Buttons down both sides act on the car through the Commander, each door
 on its own side: trunk, mirror tilt and the charge port on the left,
