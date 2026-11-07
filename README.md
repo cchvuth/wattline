@@ -9,14 +9,18 @@ Tesla Model Y (built for a 2026 Juniper 7-seater), fed by an Enhauto
 It shows:
 
 - speed in a ring, with front and rear motor power, and in red the regen
-  a cold or full pack can't take;
+  a cold or full pack can't take; the brake's pressure as a red line in
+  the ring's foot (a rear-motor car: the right arc is the pedals instead,
+  accelerator up, brake down);
 - battery % and range in a small dial like the speed ring (a bolt while
   charging, the arc dim on to the charge limit), and the pedal as a line
-  along the top that grows from the centre;
+  along the top that grows from the centre (not on a rear-motor car);
 - the gear engaged under the speed, speed limit, autopilot state with the
   car's hands-on nag, and the cruise set speed and follow distance;
 - turn signals, blind spot and brake as glows along the screen edges;
-- the lights on (DRL, low, high) and grip, each only while on: the car's
+- the lights on (DRL, low, high), drawn on the car too (light bars front
+  and rear, low and high beams as cones ahead, the tail brighter braking,
+  the indicators in amber), and grip, each only while on: the car's
   slippery-road verdict and traction or stability control stepping in
   (both while moving), Slip Start left on;
 - the outside temperature (ice blue near freezing), washer fluid low, cell
@@ -25,8 +29,9 @@ It shows:
 - the route along the bottom: time to go and arrival time, the energy
   and range it uses, and battery and range at arrival (plus its length and
   the destination when the Commander has them);
-- the car from above: tyre pressures on the wheels, and on the seven seats
-  each row's temperature, the front and second rows' fans (Auto's level
+- the car from above (a Model Y with 5 or 7 seats, as picked at the first
+  launch): tyre pressures on the wheels, and on the seats each row's
+  temperature, the front and second rows' fans (Auto's level
   when on Auto), buckled belts in green and a taken seat left unbuckled in
   red;
 - a g-meter like Track Mode's: a dot for the force felt (up braking, down
@@ -69,8 +74,8 @@ while WiFi is mid-try (at start, when the app comes back, on every retry; on
 Android a look for `S3XY_OBD`, up to 3 s by default and 1-10 s on the dialog's
 scan-time slider, then the join and the hello):
 connected first, it had the Commander switch its WiFi off. A link already
-being made when a try begins is left to finish. A switch in the WiFi dialog
-makes it wait for the live WiFi stream however long that takes, and WiFi
+being made when a try begins is left to finish. A switch in the settings
+(on by default) makes it wait for the live WiFi stream however long that takes, and WiFi
 then looks for the network with no time limit; with ScanMyTesla off there
 is then no Bluetooth either. Values neither link has are hidden.
 
@@ -79,7 +84,7 @@ What each setup is missing:
 - **ScanMyTesla on (WiFi):** everything except the destination name and
   route distance. The Commander drops its own link to the car in this mode,
   and the S3XY Dash goes offline.
-- **ScanMyTesla off (Bluetooth only):** tyre pressures, the seven-seat map
+- **ScanMyTesla off (Bluetooth only):** tyre pressures, the seat map
   (belts, row temperatures and fans), grip, cabin CO₂, washer fluid, the cruise
   set speed, the charging figures, the charge port, mirror and
   interior-light states, and the CAN diagnostics. The destination and the
@@ -98,15 +103,18 @@ the scroll-wheel approval only the first time, or when you tap.
 
 ## Setup
 
-1. In the S3XY Buttons app: Commander Settings › **ScanMyTesla support**
-   on. The Commander then raises the `S3XY_OBD` network (password
-   `12345678`). Skip this step to run on Bluetooth only.
-2. Open the dash.
+1. In the S3XY app: Commander › Scan My Tesla, turn on **ScanMyTesla
+   support** and **ScanMyTesla Always ON**. The Commander then raises the
+   `S3XY_OBD` network (password `12345678`). Skip this step to run on
+   Bluetooth only.
+2. Open the dash. The first launch asks which car (Model Y, 5 or 7 seats,
+   and a 5-seater's drive), then shows these steps, step 1 with the S3XY
+   app's own screens, before the phone asks for its permissions.
    - Android joins `S3XY_OBD` itself (approve the system dialog once) and
      keeps mobile data for everything else.
    - On iPhone, join `S3XY_OBD` in Settings › Wi-Fi.
-   - The WiFi icon's dialog edits the network, host and port, the Android
-     scan time and the Bluetooth timings.
+   - The WiFi and Bluetooth icons open the settings: the car, the network,
+     host and port, the Android scan time and the Bluetooth timings.
 3. Close the S3XY app: the Commander takes one Bluetooth client at a time.
    The first time, approve the phone in the car by double-pressing the
    right scroll wheel. A refused link waits for you rather than retrying
