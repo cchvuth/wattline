@@ -378,6 +378,32 @@ void main() {
     expect((v.front, v.rear), (-92.0, 300.0));
   });
 
+  // A rear-motor car: the right arc is the pedal, whatever a front reads.
+  testWidgets('a rear-motor ring shows the pedal on the right', (t) async {
+    await t.pumpWidget(const MaterialApp(
+        home: RingGauge(glideAll: false, frontKw: 40, rearKw: 23, rearOnly: true, pedalPct: 18, child: SizedBox())));
+    await t.pumpAndSettle();
+    final p = t.widget<CustomPaint>(find.descendant(of: find.byType(RingGauge), matching: find.byType(CustomPaint)).first);
+    final dynamic v = (p.painter as dynamic).v;
+    expect((v.front, v.rear), (18.0, 23.0));
+    // The brake pressed: the arc's lower half, as a negative.
+    await t.pumpWidget(const MaterialApp(
+        home: RingGauge(glideAll: false, frontKw: 40, rearKw: -20, rearOnly: true, pedalPct: 0, brakePct: 35, child: SizedBox())));
+    await t.pumpAndSettle();
+    final q = t.widget<CustomPaint>(find.descendant(of: find.byType(RingGauge), matching: find.byType(CustomPaint)).first);
+    expect((q.painter as dynamic).v.front, -35.0);
+  });
+
+  // Two motors: the brake in the ring's foot, the motors left as they are.
+  testWidgets('a two-motor ring shows the brake in its foot', (t) async {
+    await t.pumpWidget(const MaterialApp(
+        home: RingGauge(glideAll: false, frontKw: -9, rearKw: -41, brakePct: 30, child: SizedBox())));
+    await t.pumpAndSettle();
+    final p = t.widget<CustomPaint>(find.descendant(of: find.byType(RingGauge), matching: find.byType(CustomPaint)).first);
+    final dynamic v = (p.painter as dynamic).v;
+    expect((v.front, v.rear, v.brake), (-9.0, -41.0, 30.0));
+  });
+
   testWidgets('glide off: small changes land at once, jumps still glide', (t) async {
     Widget ring(double rear) => MaterialApp(
         home: RingGauge(glideAll: false, frontKw: 0, rearKw: rear, child: const SizedBox()));

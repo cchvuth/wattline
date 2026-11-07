@@ -672,6 +672,30 @@ void main() {
     expect(p.rearKw, 5.0);
   });
 
+  test('a rear-motor car: the rear follows the pack alone', () {
+    final p = Panda()
+      ..rwd = true // as picked
+      ..onFrame(0x118, 1, [0, 0, 0x80, 0, 0, 0, 0, 0]) // D
+      ..speed = 30
+      ..onFrame(0x132, 1, pack(400, -20)) // 8 kW from the pack
+      ..onFrame(0x266, 1, [0, 0, 0, 0, 0x88, 0x10, 0]); // rear 4 kW: 4 kW besides
+    expect(p.frontKw, isNull);
+    expect(p.otherKw, 4.0);
+    p.onFrame(0x132, 1, pack(400, -50)); // 20 kW: all of the 12 more to the rear
+    expect(p.rearKw, closeTo(16.0, 1e-9));
+    // Over Bluetooth, whatever the Commander says of a front motor is not shown.
+    p.fromBt({51: 96, 53: 192});
+    expect(p.frontKw, isNull);
+  });
+
+  // 0x38D ESP_brakeMasterCylPress 44|10 x0.3 -30 bar.
+  test('brake pressure: a share of full braking, nothing at rest', () {
+    final p = Panda()..onFrame(0x38D, 1, [0, 0, 0, 0, 0, 0x60, 0x0E]); // raw 230: 39 bar
+    expect(p.brakePct, closeTo(39 / Panda.brakeFullBar * 100, 1e-6));
+    p.onFrame(0x38D, 1, [0, 0, 0, 0, 0, 0x40, 0x06]); // raw 100: 0 bar
+    expect(p.brakePct, 0);
+  });
+
   test('other draws: climate, 12 V and the rest of the pack-motor gap', () {
     final p = Panda()
       ..onFrame(0x118, 1, [0, 0, 0x80, 0, 0, 0, 0, 0]) // D

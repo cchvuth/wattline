@@ -60,11 +60,15 @@ class Panda extends ChangeNotifier {
   /// the rest: putting its value up would make the readout step once a second.
   void _motorFrame() {
     final p = packKw;
-    if (p == null || _rearAt == null || _frontAt == null) return; // a whole reading
+    if (p == null || _rearAt == null || (_frontAt == null && !rwd)) return; // a whole reading
     final rest = (p - (_frontAt ?? 0) - (_rearAt ?? 0) - (climateKw ?? 0) - (lvKw ?? 0)).clamp(0, 5).toDouble();
     final o = _other;
     _other = o == null ? rest : o + (rest - o) * 0.05; // about 20 frames' worth
   }
+
+  /// A rear-motor car (picked on the first launch): no front motor frames,
+  /// so the blend gives the rear all the motors' power.
+  bool rwd = false;
 
   bool get _stopped => speed == 0 && (pedalPct ?? 0) == 0;
 
@@ -90,6 +94,17 @@ class Panda extends ChangeNotifier {
   }
 
   double? pedalPct;
+
+  /// How hard the brake is pressed, %, for the ring: the master cylinder's
+  /// pressure over [brakeFullBar]; under 2 bar is a foot resting on it.
+  /// Null until the frame comes (the ring then shows no brake).
+  double? brakePct;
+  double? _brakeBar;
+
+  /// The pressure the ring calls full braking.
+  /// ponytail: a guess (a firm stop is some tens of bar); set it from a
+  /// drive's trace, its 'mc=' column.
+  static const brakeFullBar = 80.0;
   double? socPct;
   double? rangeMi;
   double? speedLimit;
@@ -359,7 +374,8 @@ class Panda extends ChangeNotifier {
         'front=$frontKw rear=$rearKw pack=${packKw?.toStringAsFixed(1)} climate=${climateKw?.toStringAsFixed(2)} 12v=${lvKw?.toStringAsFixed(2)} other=${otherKw?.toStringAsFixed(2)} regenMax=$regenMaxKw | ${raw(0x2E5)} | ${raw(0x266)} | ${raw(0x252)} | '
         'bt ${b == null ? '-' : (b.keys.where((k) => b[k] is num).toList()..sort()).map((k) => '$k=${b[k]}').join(' ')} | '
         'now 118 ${hexOf(frames[0x118]?.data ?? const [])} 2b6 ${hexOf(frames[0x2B6]?.data ?? const [])} '
-        'brake=$braking slippery=$slippery';
+        'brake=$braking slippery=$slippery | '
+        'brake mc=$_brakeBar/${frames[0x38D]?.count ?? 0}';
   }
 
   /// Every signal as decoded from the newest payload that carries it (a
@@ -392,6 +408,7 @@ class Panda extends ChangeNotifier {
   /// held against it: pushes come on a change, so the last one can be the
   /// drive's.
   void _btMotors(double? f, double? r) {
+    if (rwd) f = null; // whatever the Commander says of a motor the car has not
     if (f == null && r == null) return;
     bool off(double? v, double max) => v != null && (v < -200 || v > max);
     bool moving(double? v) => v != null && v.abs() > 3;
@@ -808,6 +825,7 @@ class Panda extends ChangeNotifier {
     speed = 0;
     frontKw = rearKw = pedalPct = packKw = _packV = _frontAt = _rearAt = _other = null;
     lvKw = _compKw = _heatLKw = _heatRKw = _lvV = null;
+    _brakeBar = brakePct = null;
     _compOk = false;
   }
 
@@ -877,6 +895,7 @@ class Panda extends ChangeNotifier {
     0x2E5, 0x266, 0x33A, 0x332, 0x352, 0x392, // motor power, soc, cells, energy
     0x347, 0x238, 0x3FD, 0x321, 0x2F3, 0x25A, 0x273, // nav, outside, climate, tyres, tilt
     0x472, 0x333, 0x33B, // charging: reason, limit, time
+    0x38D, // brake pressure, live for the ring (100 a second, by the DBC)
     0x219, 0x243, // not on this car's stream
   };
 
@@ -1316,6 +1335,9 @@ class Panda extends ChangeNotifier {
           _rearAt = v;
           _motorFrame();
           _blend();
+        case 'brakeBar':
+          _brakeBar = v;
+          brakePct = v < 2 ? 0 : (v / brakeFullBar * 100).clamp(0, 100).toDouble();
         case 'compV':
           _compOk = v >= 200 && v <= 600 && (v - (_packV ?? v)).abs() < 40;
         case 'compW':

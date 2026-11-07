@@ -63,6 +63,10 @@ const kSignals = <String, Sig>{
   // driving on it and coasting, and clear in P; so it lights the dash's lamp
   // as the car lights its own. Bits 48-50 beside it stay 0.
   'brake': Sig(0x118, 51, 1),
+  // How hard the brake is pressed, for the ring: ID38D ESP_party3,
+  // ESP_brakeMasterCylPress, bar (2026.26 Model Y party DBC; 10 ms). The
+  // owner's pick of the DBC's three candidates; yet to be seen on this car.
+  'brakeBar': Sig(0x38D, 44, 10, scale: 0.3, offset: -30, sna: 1023),
 
   // ID2E5 FrontInverterPower / ID266 RearInverterPower. Firmware 2026.38
   // repacked both into 7 bytes: the power moved from 0|11 to 41|11, after

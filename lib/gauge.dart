@@ -27,7 +27,12 @@ const kWarn = Color(0xFFFFB020);
 /// ring, regen drops below it in green. Scaled for everyday driving, not the
 /// motor's peak — a 250 kW span never moved off the bottom in traffic.
 /// [regenCapKw]: the most regen the pack takes now (less when cold or
-/// full), red on the regen side past it.
+/// full), red on the regen side past it. [rearOnly]: a rear-motor car, its
+/// right arc the pedals instead, from the same zero as the motor's: the
+/// accelerator ([pedalPct]) up, the brake ([brakePct]) down, in red. With
+/// two motors the brake is in the ring's foot instead: a thin red arc from the
+/// bottom centre, wider each way the harder it is pressed, into the motors'
+/// regen ends at full travel.
 class RingGauge extends StatefulWidget {
   const RingGauge({
     super.key,
@@ -37,12 +42,28 @@ class RingGauge extends StatefulWidget {
     this.maxKw = 160,
     this.minKw = -60,
     this.glideAll = true,
+    this.rearOnly = false,
+    this.pedalPct,
+    this.brakePct,
     required this.child,
   });
 
   final double? frontKw, rearKw, regenCapKw;
   final double maxKw, minKw;
+  final bool rearOnly;
+  final double? pedalPct, brakePct;
   final Widget child;
+
+  /// What the right arc shows: the front motor, or a rear-motor car's
+  /// pedals, the brake as a negative.
+  double? get _right => !rearOnly
+      ? frontKw
+      : (brakePct ?? 0) > 0
+          ? -brakePct!
+          : pedalPct;
+
+  /// The brake in the ring's foot: two motors only.
+  double? get _foot => rearOnly ? null : brakePct;
 
   /// Glide on every change. Off, a change under [_jumpKw] lands at once and
   /// only a jump glides: the screen then redraws as the data comes (up to
@@ -61,7 +82,8 @@ class _RingGaugeState extends State<RingGauge> {
   @override
   void didUpdateWidget(RingGauge old) {
     super.didUpdateWidget(old);
-    final jump = ((widget.frontKw ?? 0) - (old.frontKw ?? 0)).abs() >= _jumpKw ||
+    final jump = ((widget._right ?? 0) - (old._right ?? 0)).abs() >= _jumpKw ||
+        ((widget._foot ?? 0) - (old._foot ?? 0)).abs() >= _jumpKw ||
         ((widget.rearKw ?? 0) - (old.rearKw ?? 0)).abs() >= _jumpKw;
     // A jump glides, and so does whatever comes while it does: landing at
     // once mid-glide would be the very jump it smooths.
@@ -74,15 +96,17 @@ class _RingGaugeState extends State<RingGauge> {
     final glide = w.glideAll || DateTime.now().isBefore(_glideUntil);
     return TweenAnimationBuilder<_Vals>(
         tween: _ValsTween(end: _Vals(
-          w.frontKw ?? 0, // the figures tell the truth; only the arcs stop at the ends
+          w._right ?? 0, // the figures tell the truth; only the arcs stop at the ends
           w.rearKw ?? 0,
+          w._foot ?? 0,
         )),
         duration: glide ? _glide : Duration.zero,
         curve: Curves.easeOut,
         builder: (context, v, _) => CustomPaint(
           painter: _RingPainter(
             v,
-            known: (w.frontKw != null, w.rearKw != null),
+            known: (w._right != null, w.rearKw != null),
+            rearOnly: w.rearOnly,
             cap: w.regenCapKw,
             maxKw: w.maxKw,
             minKw: w.minKw,
@@ -94,18 +118,19 @@ class _RingGaugeState extends State<RingGauge> {
 }
 
 class _Vals {
-  const _Vals(this.front, this.rear);
-  final double front, rear;
+  const _Vals(this.front, this.rear, [this.brake = 0]);
+  final double front, rear, brake;
 
   // By value: unchanged power starts no animation and paints nothing.
   @override
-  bool operator ==(Object o) => o is _Vals && o.front == front && o.rear == rear;
+  bool operator ==(Object o) => o is _Vals && o.front == front && o.rear == rear && o.brake == brake;
   @override
-  int get hashCode => Object.hash(front, rear);
+  int get hashCode => Object.hash(front, rear, brake);
 
   _Vals lerp(_Vals o, double t) => _Vals(
         front + (o.front - front) * t,
         rear + (o.rear - rear) * t,
+        brake + (o.brake - brake) * t,
       );
 }
 
@@ -121,6 +146,7 @@ class _RingPainter extends CustomPainter {
   _RingPainter(
     this.v, {
     required this.known,
+    required this.rearOnly,
     required this.cap,
     required this.maxKw,
     required this.minKw,
@@ -128,6 +154,7 @@ class _RingPainter extends CustomPainter {
 
   final _Vals v;
   final (bool, bool) known;
+  final bool rearOnly;
   final double? cap;
   final double maxKw, minKw;
 
@@ -157,6 +184,15 @@ class _RingPainter extends CustomPainter {
           stroke(Colors.white24)..strokeWidth = 1.5);
     }
 
+    // The brake, two motors: a thin red line in the foot between the
+    // sectors, nothing while it is up, out from the bottom centre each way;
+    // full travel reaches the motors' zero ticks. Under the motors' arcs, so
+    // regen shows over it.
+    if (!rearOnly && v.brake > 0) {
+      final reach = _deg(75) * v.brake.clamp(0, 100) / 100;
+      canvas.drawArc(rect, _deg(90) - reach, 2 * reach, false, stroke(kAlert)..strokeWidth = w * 0.35);
+    }
+
     // Rear: left sector, zero 15° below halfway, power climbing clockwise
     // towards the top, regen dropping back towards the bottom. Power gets the
     // longer span, as it has the bigger range.
@@ -164,8 +200,19 @@ class _RingPainter extends CustomPainter {
     final drop = _deg(15);
     final zl = _left.start + half - drop, zr = _right.start + half + drop;
     _motor(arc, v.rear, zero: zl, posSpan: half + drop, negSpan: half - drop, up: true);
-    // Front: mirror image.
-    _motor(arc, v.front, zero: zr, posSpan: half + drop, negSpan: half - drop, up: false);
+    // Front: mirror image. Or a rear-motor car's pedals, in %: the
+    // accelerator up, the brake down.
+    if (rearOnly) {
+      final pct = v.front.clamp(-100, 100);
+      if (pct >= 0) {
+        final s = (half + drop) * pct / 100;
+        arc(zr - s, s, kAccent);
+      } else {
+        arc(zr, (half - drop) * -pct / 100, kAlert);
+      }
+    } else {
+      _motor(arc, v.front, zero: zr, posSpan: half + drop, negSpan: half - drop, up: false);
+    }
 
     // Regen the pack cannot take now, red past the cap. The cap is the whole
     // pack's, so a motor's share is what the other is not already using: a
@@ -179,8 +226,9 @@ class _RingPainter extends CustomPainter {
             stroke(kAlert)..strokeWidth = w * 0.3);
       }
 
-      capped(total - max(0, -v.front), zl, true);
-      capped(total - max(0, -v.rear), zr, false);
+      // A rear-motor car's rear has the whole cap.
+      capped(rearOnly ? total : total - max(0, -v.front), zl, true);
+      if (!rearOnly) capped(total - max(0, -v.rear), zr, false);
     }
 
     // Zero ticks on the motor sectors.
@@ -195,8 +243,8 @@ class _RingPainter extends CustomPainter {
     _label(canvas, known.$2 ? '${v.rear.round()}' : '—', c + Offset(-ri, -r * 0.06), r * 0.16, Colors.white, weight: FontWeight.w200);
     // Two short lines: one line this size reached the arc.
     _label(canvas, 'kW\nREAR', c + Offset(-ri, r * 0.155), r * 0.085, Colors.white70, spacing: 0.5);
-    _label(canvas, known.$1 ? '${v.front.round()}' : '—', c + Offset(ri, -r * 0.06), r * 0.16, Colors.white, weight: FontWeight.w200);
-    _label(canvas, 'kW\nFRONT', c + Offset(ri, r * 0.155), r * 0.085, Colors.white70, spacing: 0.5);
+    _label(canvas, known.$1 ? '${(rearOnly ? v.front.abs() : v.front).round()}' : '—', c + Offset(ri, -r * 0.06), r * 0.16, Colors.white, weight: FontWeight.w200);
+    _label(canvas, rearOnly ? (v.front < 0 ? '%\nBRAKE' : '%\nPEDAL') : 'kW\nFRONT', c + Offset(ri, r * 0.155), r * 0.085, Colors.white70, spacing: 0.5);
   }
 
   void _motor(void Function(double, double, Color) arc, double kw,
@@ -212,7 +260,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) =>
-      old.v != v || old.known != known || old.cap != cap;
+      old.v != v || old.known != known || old.cap != cap || old.rearOnly != rearOnly;
 }
 
 void _label(Canvas canvas, String s, Offset at, double size, Color color,

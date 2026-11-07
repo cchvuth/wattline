@@ -588,7 +588,8 @@ class _DashPageState extends State<DashPage> {
                 // ring's centre as it goes down; no figure. Within the safe
                 // area as the ring is: edge to edge, the camera's cutout
                 // widens one side and the screen's centre is not the ring's.
-                if (live)
+                // Not on a rear-motor car: its ring has the pedal.
+                if (live && !o.rwd)
                   IgnorePointer(
                     child: ListenableBuilder(
                       listenable: o.fast,
@@ -620,6 +621,9 @@ class _DashPageState extends State<DashPage> {
                               glideAll: _smooth,
                               frontKw: o.live ? o.frontKw : null,
                               rearKw: o.live ? o.rearKw : null,
+                              rearOnly: o.rwd,
+                              pedalPct: o.live ? o.pedalPct : null,
+                              brakePct: o.live ? o.brakePct : null,
                               regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
                               // Digital speed sits in the ring, the gear under it.
                               child: _Centre(obd: o, gear: true),
@@ -753,6 +757,9 @@ class _Compact extends StatelessWidget {
                   glideAll: smooth,
                   frontKw: o.live ? o.frontKw : null,
                   rearKw: o.live ? o.rearKw : null,
+                  rearOnly: o.rwd,
+                  pedalPct: o.live ? o.pedalPct : null,
+                  brakePct: o.live ? o.brakePct : null,
                   regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
                   child: _Centre(obd: o),
                 ),

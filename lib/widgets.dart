@@ -68,10 +68,11 @@ class _Centre extends StatelessWidget {
               child: FittedBox(child: _SpeedLimit(limit: obd.speedLimit)),
             ),
           ),
-          // Only the gear engaged, in the gap the ring leaves at its foot.
+          // Only the gear engaged, in the gap the ring leaves at its foot,
+          // clear of the brake's arc there.
           if (gear)
             Positioned(
-              bottom: c.maxHeight * 0.02,
+              bottom: c.maxHeight * 0.05,
               child: Text(o.gear,
                   style: TextStyle(
                       fontSize: 28,
