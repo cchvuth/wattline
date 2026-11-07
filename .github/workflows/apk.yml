@@ -12,7 +12,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # macOS, as the layout tests load the Mac's own fonts
+    # (test/flutter_test_config.dart); Linux falls back to Ahem and overflows.
+    runs-on: macos-latest
     env:
       # Release builds are signed with the debug key. With the Mac's key here
       # (base64 of ~/.android/debug.keystore), this APK installs over a local
