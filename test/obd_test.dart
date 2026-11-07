@@ -793,6 +793,9 @@ void main() {
     final missing = kSubscribeIds.toSet().difference(polled).difference(Panda.alwaysOn);
     expect(missing, isEmpty, reason: 'new ids need a polling decision in Panda');
     expect(Panda.alwaysOn.difference(kSubscribeIds.toSet()), isEmpty); // nothing stale
+    // The streamed ids fit the subscribe list's first packet (43 ids): a
+    // second one must hold only polled ids.
+    expect(Panda.alwaysOn.length, lessThanOrEqualTo(43));
     // Some that must and must not be polled.
     expect(polled.containsAll([0x2E1, 0x3C2, 0x2B3]), isTrue);
     expect(polled.intersection({0x257, 0x118, 0x101, 0x132, 0x3F5}), isEmpty);

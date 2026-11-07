@@ -835,7 +835,12 @@ class Panda extends ChangeNotifier {
     _sparseOn.clear();
     _sparseStray.clear();
     var packet = <int>[0x0f];
-    for (final id in kSubscribeIds) {
+    // The streamed ids first: past 43 the list takes a second packet, and
+    // that one then holds only polled ids, which the wheel adds again
+    // anyway. Lose the first and the stream goes quiet, which repairs it; had
+    // a streamed id come through in the second, it would pass for live with
+    // the rest of the list missing.
+    for (final id in [...kSubscribeIds.where(alwaysOn.contains), ...kSubscribeIds.where((i) => !alwaysOn.contains(i))]) {
       if (packet.length > 1 + 3 * 42) {
         _send(packet);
         packet = <int>[0x0f];
