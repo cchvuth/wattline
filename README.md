@@ -137,9 +137,9 @@ flutter build apk --release --target-platform android-arm64  # phones only, smal
 flutter build ios --simulator --debug
 ```
 
-Every push to master builds the arm64 APK on GitHub Actions
-(`.github/workflows/apk.yml`), after analyze and the tests; it is the run's
-artifact. Release builds are signed with the debug key: store the Mac's
+Every push to master builds the APKs on GitHub Actions
+(`.github/workflows/apk.yml`), after analyze and the tests, and publishes
+them as a pre-release (`build-N`, arm64 and universal). Release builds are signed with the debug key: store the Mac's
 `~/.android/debug.keystore`, base64, as the `DEBUG_KEYSTORE` secret, and the
 CI APK installs over a local build without losing the app's settings.
 
