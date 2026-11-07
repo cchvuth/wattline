@@ -31,8 +31,8 @@ const kWarn = Color(0xFFFFB020);
 /// right arc the pedals instead, from the same zero as the motor's: the
 /// accelerator ([pedalPct]) up, the brake ([brakePct]) down, in red. With
 /// two motors the brake is in the ring's foot instead: a thin red arc from the
-/// bottom centre, wider each way the harder it is pressed, into the motors'
-/// regen ends at full travel.
+/// bottom centre, wider each way the harder it is pressed, short of the
+/// motors' arcs.
 class RingGauge extends StatefulWidget {
   const RingGauge({
     super.key,
@@ -186,10 +186,10 @@ class _RingPainter extends CustomPainter {
 
     // The brake, two motors: a thin red line in the foot between the
     // sectors, nothing while it is up, out from the bottom centre each way;
-    // full travel reaches the motors' zero ticks. Under the motors' arcs, so
-    // regen shows over it.
+    // full travel stops a clear gap short of the motors' arcs.
     if (!rearOnly && v.brake > 0) {
-      final reach = _deg(75) * v.brake.clamp(0, 100) / 100;
+      final room = _deg(90) - (_right.start + _right.sweep) - _deg(10); // to the sector's end, less the gap
+      final reach = room * v.brake.clamp(0, 100) / 100;
       canvas.drawArc(rect, _deg(90) - reach, 2 * reach, false, stroke(kAlert)..strokeWidth = w * 0.35);
     }
 
