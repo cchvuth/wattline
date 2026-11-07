@@ -12,6 +12,12 @@ on:
 permissions:
   contents: write # the release
 
+# A newer push to master replaces a run still going; a version tag's run
+# always finishes.
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
 # macOS for the tests and builds: the layout tests load the Mac's own fonts
 # (test/flutter_test_config.dart), and Linux, falling back to Ahem, overflows.
 jobs:
