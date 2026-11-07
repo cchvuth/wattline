@@ -1060,6 +1060,20 @@ abstract final class _Car {
     (0.9455, 0.208), (0.9405, 0.222), (0.9368, 0.238), (0.9333, 0.249), (0.9298, 0.269), (0.9263, 0.280),
   ];
 
+  /// Where the path lines start: just outside the mirror tips (0.473 either
+  /// side of [centre], at 0.355 of the length): the car's widest points,
+  /// whose paths bound the space it sweeps.
+  static const pathFrom = (0.355, 0.495);
+
+  /// The steering: the Model Y's 12.1 m turning circle (kerb to kerb, so
+  /// 6.05 m to the outer front wheel), 2.89 m wheelbase and 1.66 m track put
+  /// the rear axle's centre 4.48 m from the turning point at full lock:
+  /// 32.8° for the one road wheel of the bicycle model. The wheel turns about
+  /// 450° each way, so a ratio near 13.7:1.
+  /// ponytail: published figures; set them from a full-lock reading once the
+  /// steering frame is confirmed.
+  static const steerRatio = 13.7, maxRoadDeg = 32.8;
+
   /// The turn signals, each side alike, on the body's edge (the narrower
   /// side of both pictures): at the nose bar's end,
   /// the side repeater on the front wing, at the tail bar's end.
@@ -1087,8 +1101,21 @@ class _CarLights extends CustomPainter {
     required this.brake,
     this.left = false,
     this.right = false,
+    this.steerDeg,
+    this.steerLines = false,
+    this.reverse = false,
     this.beams = false,
   });
+
+  /// In R: the path lines run out behind the car.
+  final bool reverse;
+
+  /// The steering wheel's angle, deg, left positive: the car's path either
+  /// side, dotted, while the wheel is turned past 60° and 2 s after.
+  final double? steerDeg;
+
+  /// Whether to draw them ([Panda.steerLines]): past the mark, or just back.
+  final bool steerLines;
 
   final bool drl, low, high, brake;
 
@@ -1181,6 +1208,36 @@ class _CarLights extends CustomPainter {
             ),
     ];
     if (beams) {
+      // The space the car sweeps, as it really goes: with the wheel held,
+      // the car turns about a point level with the rear axle, wheelbase /
+      // tan(road wheel angle) to the side, and every point on it sweeps an
+      // arc about that point, true to scale. Where an arc passes under the
+      // car the body hides it (these are painted beneath it). Dots, fading
+      // with distance; none while fairly straight ([steerLines]).
+      final road = ((steerDeg ?? 0) / _Car.steerRatio).clamp(-_Car.maxRoadDeg, _Car.maxRoadDeg) * pi / 180;
+      if (steerLines) {
+        final wheelbase = h * (_Car.axles[1] - _Car.axles[0]); // 2.89 m
+        // Wheels dead straight (held after a turn): a turn too wide to see.
+        final r = wheelbase / tan(max(road.abs(), 1e-4)), side = road > 0 ? -1 : 1; // left: centre to the left
+        final cx = w * _Car.centre, c = Offset(cx + side * r, h * _Car.axles[1]);
+        final step = h * 0.022;
+        // Each line the true path of a point just outside the body, one arc
+        // about that point. Forward, from the mirror tips on (at full lock
+        // the outer one dips under the front corner and comes out ahead of
+        // it); in reverse, from beside the rear wheels backwards, ending
+        // above the bottom bar.
+        final len = reverse ? h * 0.36 : h * 0.7, dir = reverse ? -1 : 1;
+        final from = reverse ? h * _Car.axles[1] : h * _Car.pathFrom.$1;
+        for (final s in [-1, 1]) {
+          final p = Offset(cx + s * w * _Car.pathFrom.$2, from);
+          final rad = (p - c).distance, a0 = atan2(p.dy - c.dy, p.dx - c.dx);
+          for (var d = 0.0; d <= len; d += step) {
+            final a = a0 + dir * side * d / rad; // forward: up the screen; reverse: down
+            canvas.drawCircle(c + Offset(cos(a), sin(a)) * rad, 1.6,
+                Paint()..color = Colors.white.withValues(alpha: 0.8 * (1 - d / len)));
+          }
+        }
+      }
       // Under the car: the beams and the bars' glow. The body hides the half
       // that would light it, and the glow fades round the bars' ends.
       if (high) {
@@ -1213,6 +1270,9 @@ class _CarLights extends CustomPainter {
       old.brake != brake ||
       old.left != left ||
       old.right != right ||
+      old.steerDeg != steerDeg ||
+      old.steerLines != steerLines ||
+      old.reverse != reverse ||
       old.beams != beams;
 }
 
@@ -1323,6 +1383,9 @@ class _Cabin extends StatelessWidget {
                   brake: o.braking,
                   left: o.indL && o.blinkLit,
                   right: o.indR && o.blinkLit,
+                  steerDeg: o.steerDeg,
+                  steerLines: o.steerLines,
+                  reverse: o.gear == 'R',
                   beams: true)),
         Image.asset('$dir/car.png', fit: BoxFit.fill),
         if (live)

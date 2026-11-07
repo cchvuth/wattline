@@ -146,6 +146,7 @@ final _shots = <String, (Size, Panda Function())>{
       ..brakePct = 30
       ..indL = true
       ..blinkLit = true
+      ..steerDeg = 150 // into the turn
       ..blindR = true
       ..socPct = 52
       ..rangeMi = 158

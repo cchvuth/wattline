@@ -67,6 +67,15 @@ const kSignals = <String, Sig>{
   // ESP_brakeMasterCylPress, bar (2026.26 Model Y party DBC; 10 ms). The
   // owner's pick of the DBC's three candidates; yet to be seen on this car.
   'brakeBar': Sig(0x38D, 44, 10, scale: 0.3, offset: -30, sna: 1023),
+  // The steering wheel's angle, deg, for drawing the front wheels: on trial,
+  // traced not shown, as neither frame has been seen on this car. ID129
+  // SCCM_steeringAngle (2026.26 Model Y DBC, which notes it unseen on a
+  // vehicle bus; the Model 3's long-known layout). ID370 EPAS3S_sysStatus
+  // carries EPAS3S_internalSAS big-endian (37|14@0, x0.1 -819.2), which
+  // decode() does not read: Panda.traceLine works it out from the bytes;
+  // this, its quality bit, only puts the frame on the subscription.
+  'steerSccm': Sig(0x129, 16, 14, scale: 0.1, offset: -819.2),
+  'steerEpasQf': Sig(0x370, 4, 1),
 
   // ID2E5 FrontInverterPower / ID266 RearInverterPower. Firmware 2026.38
   // repacked both into 7 bytes: the power moved from 0|11 to 41|11, after

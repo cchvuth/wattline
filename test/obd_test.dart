@@ -688,6 +688,34 @@ void main() {
     expect(p.frontKw, isNull);
   });
 
+  // On trial: both steering frames are subscribed and traced, decoded as
+  // the DBC has them (0x129 little-endian, 0x370 big-endian).
+  test('steering angle frames reach the trace', () {
+    final p = Panda()
+      // 0x129: raw 8462 at 16|14 = 846.2 - 819.2 = 27.0 deg.
+      ..onFrame(0x129, 1, [0, 0, 0x0E, 0x21, 0, 0, 0, 0])
+      // 0x370: raw 7832 = 0x1E98 from bit 37 big-endian = -36.0 deg.
+      ..onFrame(0x370, 1, [0, 0, 0, 0, 0x1E, 0x98, 0, 0]);
+    final line = p.traceLine();
+    expect(line, contains('sccm=27.0'));
+    expect(line, contains('epas=-36.0'));
+    expect(kSubscribeIds, containsAll([0x129, 0x370]));
+    expect(p.steerDeg, 27.0); // ID129 drives the path lines
+  });
+
+  test('the path lines stay 2 s after the wheel is fairly straight', () async {
+    final p = Panda();
+    expect(p.steerLines, isFalse);
+    p.steerDeg = 30; // never turned past the mark
+    expect(p.steerLines, isFalse);
+    p.steerDeg = 200;
+    expect(p.steerLines, isTrue);
+    p.steerDeg = 10; // back to straight: still shown
+    expect(p.steerLines, isTrue);
+    await Future<void>.delayed(const Duration(milliseconds: 2100));
+    expect(p.steerLines, isFalse);
+  });
+
   // 0x38D ESP_brakeMasterCylPress 44|10 x0.3 -30 bar.
   test('brake pressure: a share of full braking, nothing at rest', () {
     final p = Panda()..onFrame(0x38D, 1, [0, 0, 0, 0, 0, 0x60, 0x0E]); // raw 230: 39 bar

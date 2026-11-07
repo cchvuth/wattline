@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io' show File;
-import 'dart:math' show max, min, pi;
+import 'dart:math' show atan2, cos, max, min, pi, sin, tan;
 
 import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, listEquals;
 import 'package:flutter/material.dart';
