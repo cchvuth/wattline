@@ -159,17 +159,31 @@ void main() {
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: wifi, bt: Commander())));
     await t.tap(find.byIcon(Icons.wifi_off));
     await _frames(t);
-    expect(find.text('WiFi scan time: 3.0 s'), findsOneWidget);
-    expect(wifi.lookMs, 3000);
-    expect(find.text('Bluetooth off before WiFi starts: 1.0 s'), findsOneWidget);
-    expect(find.text('Bluetooth buttons after WiFi is live: 0.0 s'), findsOneWidget);
-    expect(find.text('Bluetooth data after WiFi is live: 5.0 s'), findsOneWidget);
-    expect(find.text('Bluetooth back if no WiFi stream: 15.0 s'), findsOneWidget);
     final prefs = await SharedPreferences.getInstance();
     // A slider is in the row of its label.
     Finder slider(String label) => find.descendant(
         of: find.ancestor(of: find.textContaining(label), matching: find.byType(Row)),
         matching: find.byType(Slider));
+    // The defaults, the owner's from the car: Bluetooth waits for the stream,
+    // so no scan time and no buttons' wait, and the fallback has nothing to time.
+    final waits = find.byType(Switch).first;
+    expect(find.text('Bluetooth waits for the WiFi stream, no time limit'), findsOneWidget);
+    expect(t.widget<Switch>(waits).value, isTrue);
+    expect(find.textContaining('WiFi scan time'), findsNothing);
+    expect(find.text('Bluetooth off before WiFi starts: 3.0 s'), findsOneWidget);
+    expect(find.text('Bluetooth after WiFi is live: 2.0 s'), findsOneWidget);
+    expect(t.widget<Slider>(slider('Bluetooth back if no WiFi stream')).onChanged, isNull);
+    // Off: the scan time and both waits, as kept.
+    await t.ensureVisible(waits);
+    await t.tap(waits);
+    await _frames(t);
+    expect(prefs.getBool('btWifiFirst'), isFalse);
+    expect(find.text('WiFi scan time: 3.0 s'), findsOneWidget);
+    expect(wifi.lookMs, 3000);
+    expect(wifi.relooks, 1);
+    expect(find.text('Bluetooth buttons after WiFi is live: 0.5 s'), findsOneWidget);
+    expect(find.text('Bluetooth data after WiFi is live: 2.0 s'), findsOneWidget);
+    expect(find.text('Bluetooth back if no WiFi stream: 15.0 s'), findsOneWidget);
     // Each to an end; the lower ones sit below the short dialog's fold.
     Future<void> slide(String label, double dx) async {
       await t.ensureVisible(slider(label));
@@ -211,9 +225,7 @@ void main() {
     await slide('Bluetooth back if no WiFi stream', -400);
     expect(find.text('Bluetooth back if no WiFi stream: 0.0 s'), findsOneWidget);
     expect(prefs.getInt('btBackMs'), 0);
-    // The switch for waiting on the WiFi stream: off, kept when flipped.
-    expect(find.text('Bluetooth waits for the WiFi stream, no time limit'), findsOneWidget);
-    final waits = find.byType(Switch).first;
+    // On again, kept when flipped.
     expect(t.widget<Switch>(waits).value, isFalse);
     await t.ensureVisible(waits);
     await t.tap(waits);
@@ -227,7 +239,7 @@ void main() {
     // none: no scan time slider, and the look is told 0.
     expect(find.textContaining('WiFi scan time'), findsNothing);
     expect(wifi.lookMs, 0);
-    expect(wifi.relooks, 1); // a look in progress takes the new limit now
+    expect(wifi.relooks, 2); // a look in progress takes the new limit now
     // And Bluetooth then starts only after the stream, buttons and data in
     // one go: their two waits are one slider, the data's.
     expect(find.byType(Slider), findsNWidgets(3)); // off before, after live, back
@@ -245,7 +257,7 @@ void main() {
     expect(find.byType(Slider), findsNWidgets(5));
     expect(find.text('WiFi scan time: ${(look / 1000).toStringAsFixed(1)} s'), findsOneWidget);
     expect(wifi.lookMs, look); // the slider's time again
-    expect(wifi.relooks, 2);
+    expect(wifi.relooks, 3);
     expect(find.text('Bluetooth buttons after WiFi is live: 10.0 s'), findsOneWidget);
     expect(find.text('Bluetooth data after WiFi is live: ${(merged / 1000).toStringAsFixed(1)} s'), findsOneWidget);
     expect(prefs.getBool('btWifiFirst'), isFalse);
@@ -259,7 +271,12 @@ void main() {
     await t.tap(find.byIcon(Icons.wifi_off));
     await _frames(t);
     expect(find.textContaining('WiFi scan time'), findsNothing);
-    expect(find.text('Bluetooth off before WiFi starts: 1.0 s'), findsOneWidget);
+    expect(find.text('Bluetooth off before WiFi starts: 3.0 s'), findsOneWidget);
+    // Not with the switch off either.
+    await t.ensureVisible(find.byType(Switch).first);
+    await t.tap(find.byType(Switch).first);
+    await _frames(t);
+    expect(find.textContaining('WiFi scan time'), findsNothing);
     await t.pumpWidget(const SizedBox());
   }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 

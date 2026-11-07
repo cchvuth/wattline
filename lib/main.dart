@@ -79,8 +79,9 @@ class _DashPageState extends State<DashPage> {
   // it takes car data again (1 s, at once and 5 s held in the car; with the
   // switch on, one wait for both); and should no stream come, before
   // Bluetooth is back (not with the switch on: it waits for the stream).
-  int _settleMs = 1000, _buttonsMs = 0, _rejoinMs = 5000, _backMs = 15000;
-  bool _wifiFirst = false; // Bluetooth waits for the WiFi stream, however long
+  // Defaults: the owner's tuned settings from the car.
+  int _settleMs = 3000, _buttonsMs = 500, _rejoinMs = 2000, _backMs = 15000;
+  bool _wifiFirst = true; // Bluetooth waits for the WiFi stream, however long
   bool _smooth = false; // the power ring and pedal line glide on every change
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
   int _lookMs = 3000; // the slider's look time; with the switch on the look has none
@@ -120,7 +121,10 @@ class _DashPageState extends State<DashPage> {
     _wifiFirst = prefs.getBool('btWifiFirst') ?? _wifiFirst;
     _smooth = prefs.getBool('smoothRing') ?? _smooth;
     _sparse = prefs.getBool('sparsePolling') ?? _sparse;
-    _obd.sparse = _sparse;
+    _obd
+      ..sparse = _sparse
+      ..thirdRow = _carSeven(prefs.getString('car'))
+      ..rwd = prefs.getString('car') == 'modelY5rwd';
     // Inside the slider's range, whatever was stored.
     _lookMs = (prefs.getInt('wifiLookMs') ?? _lookMs).clamp(1000, 10000).toInt();
     _applyLook();
@@ -137,6 +141,7 @@ class _DashPageState extends State<DashPage> {
     }
     _tyres = [_obd.tpFL, _obd.tpFR, _obd.tpRL, _obd.tpRR];
     if (mounted) setState(() {});
+    final firstRun = prefs.getString('car') == null;
     _obd.addListener(_linksChanged);
     _obd.addListener(_saveTyres);
     _bt.addListener(_linksChanged);
@@ -153,6 +158,14 @@ class _DashPageState extends State<DashPage> {
     // its WiFi off: no dial starts mid-try, at start, back in front or on a
     // retry ([_btWaitsFor]).
     _bt.waitFor = _btWaitsFor;
+    // First launch: which car, then how to set up both links, before either
+    // starts, so the phone's permission prompts come after the page that
+    // says what they are for.
+    if (firstRun && mounted) {
+      await _askCar();
+      await _setupHelp();
+      if (!mounted) return;
+    }
     _connect();
     _bt.connect();
     _startTrace();
@@ -182,7 +195,7 @@ class _DashPageState extends State<DashPage> {
     if (f == null || !mounted) return; // no folder (tests): no trace
     _traceFile = f;
     await loadBuild();
-    _trace('start: build=$diagBuild sparse=$_sparse wifiFirst=$_wifiFirst look=${_lookMs}ms settle=${_settleMs}ms buttons=${_buttonsMs}ms '
+    _trace('start: build=$diagBuild sparse=$_sparse car=${_obd.thirdRow ? 7 : 5}${_obd.rwd ? 'rwd' : 'awd'} wifiFirst=$_wifiFirst look=${_lookMs}ms settle=${_settleMs}ms buttons=${_buttonsMs}ms '
         'data=${_rejoinMs}ms back=${_backMs}ms');
     _traceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       _trace('${_obd.traceLine()} | bt ${_bt.link.name} "${_bt.status}" wait=${_btWaitsFor()} push=${_bt.pushInfo}');
@@ -233,6 +246,145 @@ class _DashPageState extends State<DashPage> {
     SharedPreferences.getInstance()
         .then((p) => p.setStringList('tyres', [for (final v in t) v?.toString() ?? '']));
   }
+  /// The cars offered: a 7-seat Model Y comes with two motors only; a
+  /// 5-seat one with one (RWD) or two.
+  static const _cars = {'modelY5rwd': '5 seats RWD', 'modelY5': '5 seats AWD', 'modelY7': '7 seats'};
+  static bool _carSeven(String? car) => car == null || car == 'modelY7'; // the owner's, by default
+
+  /// Which car: a picture of each layout to tap, then for a 5-seater its
+  /// drive. Asked on the first launch; the settings change it after.
+  /// Dismissed (back), it asks again next time.
+  Future<void> _askCar() async {
+    final seven = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Which car do you have?'),
+        content: Row(mainAxisSize: MainAxisSize.min, children: [
+          for (final s in [false, true])
+            InkWell(
+              onTap: () => Navigator.pop(ctx, s),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                child: Column(children: [
+                  CarSeats(thirdRow: s, height: 150),
+                  const SizedBox(height: 8),
+                  Text('Model Y\n${s ? 7 : 5} seats', textAlign: TextAlign.center),
+                ]),
+              ),
+            ),
+        ]),
+      ),
+    );
+    if (seven == null || !mounted) return;
+    if (seven) return _setCar('modelY7');
+    final rwd = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Which drive?'),
+        children: [
+          for (final (r, label, about) in const [
+            (true, 'Rear-wheel drive', 'one motor'),
+            (false, 'All-wheel drive', 'two motors'),
+          ])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, r),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              child: Text('$label ($about)', style: const TextStyle(fontSize: 18)),
+            ),
+        ],
+      ),
+    );
+    if (rwd != null) await _setCar(rwd ? 'modelY5rwd' : 'modelY5');
+  }
+
+  /// How to turn on the Commander's WiFi stream (ScanMyTesla) in the S3XY
+  /// app, with its own screens. After the car on the first launch; the
+  /// settings link back to it ([_setupHelp]).
+  Future<void> _smtHelp() async {
+    if (!mounted) return;
+    Widget step(String text, String image, [String? then]) => Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(text),
+            const SizedBox(height: 8),
+            ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.asset(image)),
+            if (then != null) ...[const SizedBox(height: 16), Text(then)],
+          ]),
+        );
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Turn on ScanMyTesla'),
+        content: SizedBox(
+          width: 620,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            // The third step under the first, where the shorter picture leaves room.
+            step('1. In the S3XY app, open Commander, then Scan My Tesla.', 'assets/smt/step1.jpg',
+                // An iPhone joins in Settings; Android's dash joins by itself.
+                defaultTargetPlatform == TargetPlatform.iOS
+                    ? '3. In Settings, join the $kDefaultSsid WiFi (password $kDefaultPassword); the dash finds it there.'
+                    : '3. That\'s all: the dash joins the $kDefaultSsid WiFi by itself. Allow it if the phone asks.'),
+            const SizedBox(width: 20),
+            step('2. Turn on ScanMyTesla support and ScanMyTesla Always ON.', 'assets/smt/step2.jpg'),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done'))],
+      ),
+    );
+  }
+
+  /// Both setup pages: the WiFi stream's, then the Bluetooth link's.
+  Future<void> _setupHelp() async {
+    await _smtHelp();
+    await _btHelp();
+  }
+
+  /// The Bluetooth link, for the buttons: one phone at a time, approved once
+  /// in the car; what the phone asks for and why; and the S3XY Dash.
+  Future<void> _btHelp() async {
+    if (!mounted) return;
+    final ios = defaultTargetPlatform == TargetPlatform.iOS;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Connect the buttons'),
+        content: SizedBox(
+          width: 620,
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
+            const Text('1. Close the S3XY app. The Commander takes one phone at a time over Bluetooth, '
+                'and the dash\'s buttons need it.'),
+            const Text('2. The first time, approve this phone in the car: double-press the right scroll '
+                'wheel when the car asks.'),
+            Text(ios
+                ? '3. The phone then asks for Bluetooth, for the Commander, and the local network, '
+                    'for its $kDefaultSsid WiFi.'
+                : '3. The phone then asks for nearby devices, for the Commander\'s Bluetooth, and '
+                    'location: Android lets an app find a WiFi network or a Bluetooth device only with '
+                    'it. The dash uses both for the Commander alone.'),
+            const Text('Have an S3XY Dash? It goes blank while ScanMyTesla is on: the Commander drops '
+                'its own link to the car in that mode.',
+                style: TextStyle(color: Colors.white70)),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done'))],
+      ),
+    );
+  }
+
+  Future<void> _setCar(String car) async {
+    if (mounted) {
+      setState(() => _obd
+        ..thirdRow = _carSeven(car)
+        ..rwd = car == 'modelY5rwd');
+    }
+    (await SharedPreferences.getInstance()).setString('car', car);
+  }
+
   bool _wasLive = false, _wasReady = false, _wasApproving = false;
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _approval;
 
@@ -312,20 +464,12 @@ class _DashPageState extends State<DashPage> {
     }
   }
 
-  /// The Bluetooth icon: what the Commander link is doing, and try it now.
+  /// The Bluetooth icon: try the link now, and the settings, which say what
+  /// it is doing.
   void _btStatus() {
     if (_approval != null) return; // the approval prompt already says it all
     if (!_bt.ready) _bt.kick(ask: true);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-          duration: const Duration(seconds: 8),
-          // Connected, also say where the nav data stands: subscribed, how
-          // much came, and whether the Commander's own car link is up.
-          content: Text(_bt.ready
-              ? 'Commander Bluetooth: connected\nCar data: ${_bt.pushInfo}, '
-                  '${_bt.pushCount} pushes. ${_bt.carLink}.'
-              : 'Commander Bluetooth: ${_bt.status}')));
+    _settings();
   }
 
   /// Presses an S3XY function over Bluetooth. Frunk and trunk only in P: a
@@ -398,6 +542,19 @@ class _DashPageState extends State<DashPage> {
                     ? 'Live: ${_obd.speedHz} speed frames/s (the car sends about 50), ${_obd.frameHz} frames/s in all, from $_host:$_port'
                     : _obd.status,
                 style: const TextStyle(color: Colors.white70)),
+          ),
+          // And what the Bluetooth icon stands for.
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+                _bt.ready
+                    ? 'Commander Bluetooth: connected. Car data: ${_bt.pushInfo}, ${_bt.pushCount} pushes. ${_bt.carLink}.'
+                    : 'Commander Bluetooth: ${_bt.status}',
+                style: const TextStyle(color: Colors.white70)),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(onPressed: _setupHelp, child: const Text('Setup steps')),
           ),
           Row(children: [
             Expanded(
@@ -496,6 +653,22 @@ class _DashPageState extends State<DashPage> {
                 redraw(() => _sparse = v);
                 _obd.sparse = v;
                 (await SharedPreferences.getInstance()).setBool('sparsePolling', v);
+              },
+            ),
+          ]),
+          // The car picked on the first launch: a 5-seater's third row
+          // leaves the seat map, a rear-motor car's front leaves the ring.
+          const SizedBox(height: 8),
+          Row(children: [
+            const Expanded(child: Text('Car: Model Y')),
+            SegmentedButton<String>(
+              segments: [
+                for (final MapEntry(:key, :value) in _cars.entries) ButtonSegment(value: key, label: Text(value)),
+              ],
+              selected: {_obd.thirdRow ? 'modelY7' : _obd.rwd ? 'modelY5rwd' : 'modelY5'},
+              onSelectionChanged: (v) {
+                _setCar(v.first); // sets it at once; the save follows
+                redraw(() {});
               },
             ),
           ]),
