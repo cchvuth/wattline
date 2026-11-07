@@ -232,8 +232,12 @@ class Panda extends ChangeNotifier {
   double? get imbalanceMv =>
       cellVMax == null || cellVMin == null ? null : (cellVMax! - cellVMin!) * 1000;
 
+  /// The car has a third row (the car picked): a 5-seater has nowhere for
+  /// its belts to chime from.
+  bool thirdRow = true;
+
   bool get anyBeltUnbuckled =>
-      beltDriver || beltPass || belt2L || belt2C || belt2R || belt3L || belt3R;
+      beltDriver || beltPass || belt2L || belt2C || belt2R || (thirdRow && (belt3L || belt3R));
 
   /// Every write stamps the gear's age. 0x118 comes every 10 ms, so a P
   /// older than 2 s means the link stalled, and [parked] then fails closed:

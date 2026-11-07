@@ -61,6 +61,7 @@ flutter:
   # The car from above, and each seat to tint (see _Cabin).
   assets:
     - assets/car/
+    - assets/car5/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

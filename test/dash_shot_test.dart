@@ -130,6 +130,65 @@ final _shots = <String, (Size, Panda Function())>{
     o.frames[0x3A1] = Frame(0);
     return o;
   }),
+  // Town in the evening: braking on regen for a left turn, the indicator
+  // mid-flash, a cyclist in the right blind spot.
+  'city-turn': (const Size(823.5, 384), () {
+    final o = _car()
+      ..speed = 27
+      ..gear = 'D'
+      ..frontKw = -9
+      ..rearKw = -41
+      ..pedalPct = 0
+      ..braking = true
+      ..brakePct = 30
+      ..indL = true
+      ..blinkLit = true
+      ..blindR = true
+      ..socPct = 52
+      ..rangeMi = 158
+      ..speedLimit = 50
+      ..lowBeam = true
+      ..outsideC = 12
+      ..packTempC = 27
+      ..regenMaxKw = 84
+      ..co2ppm = 640
+      ..cabinC1 = 21
+      ..cabinC2 = 21
+      ..cabinC3 = 21
+      ..fan1 = 'AUTO'
+      ..fan2 = 'LOW'
+      ..buckled.addAll({'D', 'P', '2L', '2R'})
+      ..gLong = -0.24
+      ..gLat = -0.05
+      ..gMaxAccel = 0.35
+      ..gMaxBrake = 0.29
+      ..gMaxLat = 0.21;
+    o.frames[0x238] = Frame(0);
+    o.frames[0x2B6] = Frame(0);
+    o.frames[0x3A1] = Frame(0);
+    return o;
+  }),
+  // A rear-motor 5-seater: the pedals on the ring's right, no third row.
+  'rear-motor-5-seats': (const Size(823.5, 384), () => _seen(_car()
+    ..highBeam = true // a dark country road
+    ..rwd = true
+    ..thirdRow = false
+    ..speed = 64
+    ..gear = 'D'
+    ..rearKw = 23
+    ..pedalPct = 18
+    ..socPct = 77
+    ..rangeMi = 231
+    ..speedLimit = 70
+    ..outsideC = 16
+    ..packTempC = 29
+    ..regenMaxKw = 70
+    ..cabinC1 = 20
+    ..cabinC2 = 20
+    ..cabinC3 = 19
+    ..fan1 = '2'
+    ..fan2 = 'OFF'
+    ..buckled.addAll({'D', 'P', '2R'}))),
   // A Supercharger in the cold: the pack still warming holds it back.
   'charging': (const Size(823.5, 384), () => _seen(_car()
     ..speed = 0
@@ -355,6 +414,48 @@ void main() {
     // That row's figure steps off the red seat; the others stay.
     expect(find.text('17°'), findsNothing);
     expect(find.text('21°'), findsOneWidget);
+    // A 5-seater (as picked): no third row to chime from or show.
+    o
+      ..thirdRow = false
+      ..notifyListeners();
+    await t.pump();
+    expect(seats(kAlert), findsNothing);
+    expect(o.anyBeltUnbuckled, isFalse);
+    expect(find.image(const AssetImage('assets/car/seat_3R.png')), findsNothing);
+    expect(find.text('17°'), findsOneWidget); // the rear air, in the boot
+    // The left indicator, mid-flash: lit on the car's left only.
+    o
+      ..indL = true
+      ..blinkLit = true
+      ..notifyListeners();
+    await t.pump();
+    final lights = [
+      for (final e in find.byType(CustomPaint).evaluate())
+        if ((e.widget as CustomPaint).painter case final p? when p.runtimeType.toString() == '_CarLights') p as dynamic,
+    ];
+    expect(lights, hasLength(2)); // the glow under the car, the lamps over it
+    expect(lights.every((p) => p.left == true && p.right == false), isTrue);
+    expect(find.image(const AssetImage('assets/car5/car.png')), findsOneWidget);
+    await t.pumpWidget(const SizedBox());
+  });
+
+  // Before the belts are heard no seat is coloured: the picture's own dark
+  // seats show, never a green or red that is not known.
+  testWidgets('no seat colour before the belt frame', (t) async {
+    t.view
+      ..physicalSize = const Size(823, 384)
+      ..devicePixelRatio = 1;
+    final o = Panda()
+      ..status = 'live'
+      ..gear = 'D'
+      ..beltDriver = true
+      ..buckled.add('P'); // neither trusted without the chime's frame
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
+    await t.pump(const Duration(milliseconds: 700));
+    expect(find.image(const AssetImage('assets/car/car.png')), findsOneWidget);
+    expect(
+        find.byWidgetPredicate((w) => w is Image && w.image is AssetImage && (w.image as AssetImage).assetName.contains('seat_')),
+        findsNothing);
     await t.pumpWidget(const SizedBox());
   });
 
