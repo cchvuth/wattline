@@ -1,8 +1,9 @@
 # Tesla Dash
 
 A landscape driver's display for a phone mounted behind the wheel of a
-Tesla Model Y (built for a 2026 Juniper 7-seater), fed by an Enhauto
-**S3XY Commander**. Flutter; Android first, iOS works too.
+Tesla Model Y, fed by an Enhauto **S3XY Commander**. Built for the Model Y
+Juniper (2025 on), 5 or 7 seats, rear- or all-wheel drive; tested on a
+7-seater. Flutter; Android first, iOS works too.
 
 ![The dash on a cold morning: ice on the road, a cold pack capping regen, a third-row seat unbuckled](docs/screenshots/cold-morning.png)
 

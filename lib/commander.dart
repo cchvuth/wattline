@@ -784,9 +784,17 @@ class Commander extends ChangeNotifier {
     return id;
   }
 
-  /// Puts the link in a state, for tests and screenshots.
+  /// Puts the link in a state, for tests and screenshots: a connected one
+  /// (buttons, lean, full) as a session at that level would.
   @visibleForTesting
-  void show(BtLink l, String s, [DateTime? until]) => _set(l, s, until);
+  void show(BtLink l, String s, [DateTime? until]) {
+    final level = switch (l) { BtLink.buttons => _none, BtLink.lean => _lean, BtLink.full => _full, _ => null };
+    if (level != null) {
+      ready = true;
+      _level = level;
+    }
+    _set(l, s, until);
+  }
 
   void _set(BtLink l, String s, [DateTime? until]) {
     _link = l;

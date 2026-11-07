@@ -51,6 +51,7 @@ final _shots = <String, (Size, Panda Function())>{
       ..socPct = 64
       ..rangeMi = 193
       ..speedLimit = 50
+      ..autopilot = 'AP READY'
       ..lowBeam = true
       ..outsideC = -1.5
       ..washerLow = true
@@ -147,6 +148,7 @@ final _shots = <String, (Size, Panda Function())>{
       ..socPct = 52
       ..rangeMi = 158
       ..speedLimit = 50
+      ..autopilot = 'AP READY'
       ..lowBeam = true
       ..outsideC = 12
       ..packTempC = 27
@@ -180,6 +182,7 @@ final _shots = <String, (Size, Panda Function())>{
     ..socPct = 77
     ..rangeMi = 231
     ..speedLimit = 70
+    ..autopilot = 'AP READY'
     ..outsideC = 16
     ..packTempC = 29
     ..regenMaxKw = 70
@@ -243,7 +246,7 @@ final _shots = <String, (Size, Panda Function())>{
 /// it is linked to the car, so the route comes whole.
 final _bts = <String, Commander Function()>{
   'bluetooth-only': () => Commander()
-    ..ready = true
+    ..show(BtLink.full, 'live') // all the car data: no WiFi stream
     ..navDest = 'Eiffel Tower, Paris'
     ..navMiles = 31.1
     ..navMinutes = 38
@@ -263,7 +266,11 @@ void main() {
           theme: kTheme,
           debugShowCheckedModeBanner: false,
           home: RepaintBoundary(
-              key: key, child: DashPage(demo: car(), bt: _bts[name]?.call() ?? Commander()))));
+              key: key,
+              child: DashPage(
+                  demo: car(),
+                  // As in the car: connected, asking only what WiFi lacks.
+                  bt: _bts[name]?.call() ?? (Commander()..show(BtLink.lean, 'ready'))))));
       for (var i = 0; i < 20; i++) {
         await t.pump(const Duration(milliseconds: 16));
       }
