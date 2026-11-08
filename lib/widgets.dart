@@ -1422,9 +1422,10 @@ class CarSeats extends StatelessWidget {
 /// it unbuckled (that row's figures then step aside). Not over Bluetooth,
 /// which has none of it; before the stream the saved pressures on the car.
 class _Cabin extends StatelessWidget {
-  const _Cabin({required this.obd});
+  const _Cabin({required this.obd, this.draws = true});
 
   final Panda obd;
+  final bool draws; // the pack's other draws beside the car (basic: own card)
 
   @override
   Widget build(BuildContext context) {
@@ -1563,7 +1564,7 @@ class _Cabin extends StatelessWidget {
           // the column allows. A little room behind for the brake glow.
           Padding(padding: EdgeInsets.only(top: scale(4), bottom: scale(6)), child: car),
           // What the pack feeds besides the motors.
-          if (live && o.otherKw != null) ...[
+          if (draws && live && o.otherKw != null) ...[
             const SizedBox(width: 6),
             SizedBox(
               width: sideW,
@@ -1577,6 +1578,35 @@ class _Cabin extends StatelessWidget {
         ]),
       ),
     );
+  }
+}
+
+/// Basic layout's card of what the pack feeds besides the motors.
+class _Draws extends StatelessWidget {
+  const _Draws({required this.obd});
+
+  final Panda obd;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = obd, live = o.wifiLive;
+    Widget row(String label, double? kw) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(
+                width: 90,
+                child: Text(label, style: const TextStyle(fontSize: 12, letterSpacing: 0.8, color: Colors.white70))),
+            Text(!live || kw == null ? '—' : '${kw.toStringAsFixed(1)} kW',
+                style: const TextStyle(fontSize: 16, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()])),
+          ]),
+        );
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Text('POWER USE', style: TextStyle(fontSize: 11, letterSpacing: 1.5, color: Colors.white54)),
+      const SizedBox(height: 6),
+      row('CLIMATE', o.climateKw),
+      row('12 V', o.lvKw),
+      row('OTHER', o.otherKw),
+    ]);
   }
 }
 

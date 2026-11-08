@@ -308,7 +308,8 @@ void main() {
     final o = car()
       ..navRoute = true
       ..navMinutes = 9
-      ..navEnergyKwh = 48.8; // at arrival: 1.8 kWh of the 50.6 left
+      ..navEnergyKwh = 48.8 // at arrival: 1.8 kWh of the 50.6 left
+      ..lvKw = 0.6;
     final key = GlobalKey();
     await t.pumpWidget(MaterialApp(
         theme: kTheme,
@@ -364,6 +365,18 @@ void main() {
     // Each side's card is kept for the next start.
     final prefs = await SharedPreferences.getInstance();
     expect((prefs.getInt('cardLeft'), prefs.getInt('cardRight')), (3, 3));
+    // On: the g-meter left, the pack's other draws right.
+    await t.drag(left, const Offset(0, -300));
+    await t.pumpAndSettle();
+    final right = find.byType(PageView).last;
+    for (var i = 0; i < 2; i++) {
+      await t.drag(right, const Offset(0, -300));
+      await t.pumpAndSettle();
+    }
+    expect(find.textContaining('PEAK'), findsOneWidget);
+    expect(find.text('POWER USE'), findsOneWidget);
+    expect(find.text('0.6 kW'), findsOneWidget); // 12 V
+    await shot('basic-3');
     await t.pumpWidget(const SizedBox());
   });
 

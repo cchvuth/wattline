@@ -932,9 +932,10 @@ class _DashPageState extends State<DashPage> {
       );
 
   /// The basic layout: the ring between two stacks of cards, one card of
-  /// each showing, swiped up or down for the next. Both stacks hold all four
-  /// cards (the figures and lamps, the car as large as it fits, the
-  /// buttons, the route), so either side shows any; each side's card is kept.
+  /// each showing, swiped up or down for the next. Both stacks hold every
+  /// card (the figures and lamps, the car as large as it fits, the buttons,
+  /// the route, the g-meter, the pack's other draws), so either side shows
+  /// any; each side's card is kept.
   Widget _basicRow(Panda o) {
     List<Widget> cards() => [
           Column(mainAxisSize: MainAxisSize.min, children: [
@@ -946,12 +947,15 @@ class _DashPageState extends State<DashPage> {
             const SizedBox(height: 8),
             _Lights(obd: o),
           ]),
-          _Fill(_Cabin(obd: o)),
+          _Fill(_Cabin(obd: o, draws: false)),
           Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),
           ]),
           _Nav(obd: o, bt: _bt, tall: true),
+          // The g-meter (WiFi only), then the pack's other draws.
+          ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o)),
+          _Draws(obd: o),
         ];
     Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
     return Row(children: [
