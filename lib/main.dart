@@ -56,12 +56,15 @@ class DashApp extends StatelessWidget {
 }
 
 class DashPage extends StatefulWidget {
-  const DashPage({super.key, this.demo, this.bt});
+  const DashPage({super.key, this.demo, this.bt, this.basic = false});
 
   /// Pre-populated state instead of a live link. Lets the layout be rendered
   /// offline (see test/dash_shot_test.dart) without a car or a dongle.
   final Panda? demo;
   final Commander? bt;
+
+  /// The basic layout from the start (the saved choice overrides it live).
+  final bool basic;
 
   @override
   State<DashPage> createState() => _DashPageState();
@@ -84,6 +87,7 @@ class _DashPageState extends State<DashPage> {
   int _settleMs = 3000, _buttonsMs = 500, _rejoinMs = 2000, _backMs = 15000;
   bool _wifiFirst = true; // Bluetooth waits for the WiFi stream, however long
   bool _smooth = false; // the power ring and pedal line glide on every change
+  late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
   int _lookMs = 3000; // the slider's look time; with the switch on the look has none
 
@@ -121,6 +125,7 @@ class _DashPageState extends State<DashPage> {
     _backMs = prefs.getInt('btBackMs') ?? _backMs;
     _wifiFirst = prefs.getBool('btWifiFirst') ?? _wifiFirst;
     _smooth = prefs.getBool('smoothRing') ?? _smooth;
+    _basic = prefs.getBool('basic') ?? _basic;
     _sparse = prefs.getBool('sparsePolling') ?? _sparse;
     _obd
       ..sparse = _sparse
@@ -166,6 +171,7 @@ class _DashPageState extends State<DashPage> {
     // says what they are for.
     if (firstRun && mounted) {
       await _askCar();
+      await _askLayout();
       await _setupHelp();
       if (!mounted) return;
     }
@@ -304,6 +310,32 @@ class _DashPageState extends State<DashPage> {
       ),
     );
     if (rwd != null) await _setCar(rwd ? 'modelY5rwd' : 'modelY5');
+  }
+
+  /// Which layout, on the first launch (the settings switch it later):
+  /// everything at once, or basic's bigger cards.
+  Future<void> _askLayout() async {
+    final basic = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Which layout?'),
+        children: [
+          for (final (b, label, about) in const [
+            (false, 'Full', 'everything at once'),
+            (true, 'Basic', 'bigger text, one card a side; swipe a card for the next'),
+          ])
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(ctx, b),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              child: Text('$label ($about)', style: const TextStyle(fontSize: 18)),
+            ),
+        ],
+      ),
+    );
+    if (basic == null || !mounted) return;
+    setState(() => _basic = basic);
+    (await SharedPreferences.getInstance()).setBool('basic', basic);
   }
 
   /// How to turn on the Commander's WiFi stream (ScanMyTesla) in the S3XY
@@ -775,6 +807,17 @@ class _DashPageState extends State<DashPage> {
           // changes land at once and only jumps glide.
           const SizedBox(height: 8),
           Row(children: [
+            const Expanded(child: Text('Basic layout (bigger text, swipe the side cards)')),
+            Switch(
+              value: _basic,
+              onChanged: (v) async {
+                redraw(() => _basic = v);
+                setState(() {});
+                (await SharedPreferences.getInstance()).setBool('basic', v);
+              },
+            ),
+          ]),
+          Row(children: [
             const Expanded(child: Text('Smooth power ring (more battery)')),
             Switch(
               value: _smooth,
@@ -866,6 +909,48 @@ class _DashPageState extends State<DashPage> {
     _connect(now: true); // asked for: try the network even if not seen yet
   }
 
+  /// The speed and power ring, the same in both layouts.
+  Widget _ring(Panda o) => AspectRatio(
+        aspectRatio: 1,
+        child: ListenableBuilder(
+          listenable: o.fast,
+          builder: (context, _) => RingGauge(
+            glideAll: _smooth,
+            frontKw: o.live ? o.frontKw : null,
+            rearKw: o.live ? o.rearKw : null,
+            rearOnly: o.rwd,
+            pedalPct: o.live ? o.pedalPct : null,
+            brakePct: o.live ? o.brakePct : null,
+            regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
+            // Digital speed sits in the ring, the gear under it.
+            child: _Centre(obd: o, gear: true),
+          ),
+        ),
+      );
+
+  /// The basic layout: the ring between two stacks of cards, one card of
+  /// each showing, swiped up or down for the next. Left the car's figures
+  /// and the car itself; right the buttons and the route.
+  Widget _basicRow(Panda o) => Row(children: [
+        Expanded(child: _Cards(key: const ValueKey('left'), cards: [
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            if (_autopilot(o) case final ap?) Padding(padding: const EdgeInsets.only(bottom: 10), child: ap),
+            _Battery(obd: o),
+            const SizedBox(height: 10),
+            if (o.wifiLive && o.charging) _Charge(obd: o) else _Pack(obd: o),
+          ]),
+          Column(mainAxisSize: MainAxisSize.min, children: [_Lights(obd: o), _Cabin(obd: o)]),
+        ])),
+        _ring(o),
+        Expanded(child: _Cards(key: const ValueKey('right'), cards: [
+          Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
+            _Actions(obd: o, bt: _bt, onTap: _press),
+            _Actions(obd: o, bt: _bt, onTap: _press, right: true),
+          ]),
+          _Nav(obd: o, bt: _bt, tall: true),
+        ])),
+      ]);
+
   @override
   Widget build(BuildContext context) {
     // ponytail: the fixed landscape layout fits the S23 Ultra up to a 1.15
@@ -925,29 +1010,13 @@ class _DashPageState extends State<DashPage> {
                   padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
                   child: Column(children: [
                     Expanded(
-                      child: Row(children: [
+                      child: _basic ? _basicRow(o) : Row(children: [
                         _Actions(obd: o, bt: _bt, onTap: _press),
                         Expanded(child: _SideColumn(children: [
                           _Lights(obd: o),
                           _Cabin(obd: o),
                         ])),
-                        AspectRatio(
-                          aspectRatio: 1,
-                          child: ListenableBuilder(
-                            listenable: o.fast,
-                            builder: (context, _) => RingGauge(
-                              glideAll: _smooth,
-                              frontKw: o.live ? o.frontKw : null,
-                              rearKw: o.live ? o.rearKw : null,
-                              rearOnly: o.rwd,
-                              pedalPct: o.live ? o.pedalPct : null,
-                              brakePct: o.live ? o.brakePct : null,
-                              regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
-                              // Digital speed sits in the ring, the gear under it.
-                              child: _Centre(obd: o, gear: true),
-                            ),
-                          ),
-                        ),
+                        _ring(o),
                         // The battery dial and the pack's figures pinned top and
                         // bottom, so they stay put as cards come and go between
                         // them; the dial's top level with the first button's.
@@ -975,6 +1044,7 @@ class _DashPageState extends State<DashPage> {
                         onWifi: _settings,
                         onBt: _btStatus,
                         onMaps: _maps,
+                        nav: !_basic, // basic has the route on a card
                       ),
                     ),
                   ]),

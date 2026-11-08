@@ -200,9 +200,16 @@ void main() {
     expect(wifi.lookMs, look); // what the Android look waits, at its next run
     await slide('Bluetooth buttons after WiFi is live', 400); // all the way up
     expect(find.text('Bluetooth buttons after WiFi is live: 10.0 s'), findsOneWidget);
+    // Basic layout: off unless switched on, and kept.
+    final basic = find.byType(Switch).at(1);
+    expect(t.widget<Switch>(basic).value, isFalse);
+    await t.ensureVisible(basic);
+    await t.tap(basic);
+    await _frames(t);
+    expect(prefs.getBool('basic'), isTrue);
     // The power ring's glide: off unless switched on, and kept.
     expect(find.text('Smooth power ring (more battery)'), findsOneWidget);
-    final smooth = find.byType(Switch).at(1);
+    final smooth = find.byType(Switch).at(2);
     expect(t.widget<Switch>(smooth).value, isFalse);
     await t.ensureVisible(smooth);
     await t.tap(smooth);

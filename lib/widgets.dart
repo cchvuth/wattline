@@ -137,6 +137,58 @@ class _SideColumn extends StatelessWidget {
       );
 }
 
+/// Basic layout's stack of cards beside the ring: one shows, filling the
+/// side, its content scaled up to fit; a swipe up or down brings the next,
+/// and dots at the side say which.
+class _Cards extends StatefulWidget {
+  const _Cards({super.key, required this.cards});
+
+  final List<Widget> cards;
+
+  @override
+  State<_Cards> createState() => _CardsState();
+}
+
+class _CardsState extends State<_Cards> {
+  int _page = 0;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Stack(children: [
+          PageView(
+            scrollDirection: Axis.vertical,
+            onPageChanged: (p) => setState(() => _page = p),
+            children: [
+              for (final c in widget.cards)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 22, 14),
+                  child: FittedBox(child: c),
+                ),
+            ],
+          ),
+          Positioned(
+            right: 8,
+            top: 0,
+            bottom: 0,
+            child: Column(mainAxisAlignment: MainAxisAlignment.center, spacing: 6, children: [
+              for (var i = 0; i < widget.cards.length; i++)
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                      shape: BoxShape.circle, color: i == _page ? Colors.white70 : Colors.white24),
+                ),
+            ]),
+          ),
+        ]),
+      );
+}
+
 /// The route the car is driving, along the foot of the dash: time to go,
 /// arrival time, the route's length and the energy it takes, range at
 /// arrival (with what the route takes of the range now) and battery at
@@ -149,11 +201,12 @@ class _SideColumn extends StatelessWidget {
 /// from the car's API through the Commander's own link to the car. Values
 /// without data stay hidden.
 class _Nav extends StatelessWidget {
-  const _Nav({required this.obd, required this.bt, this.oneLine = false});
+  const _Nav({required this.obd, required this.bt, this.oneLine = false, this.tall = false});
 
   final Panda obd;
   final Commander bt;
   final bool oneLine; // the compact dash: one row under the ring
+  final bool tall; // basic's card: the place, then a value a line
 
   @override
   Widget build(BuildContext context) {
@@ -163,7 +216,11 @@ class _Nav extends StatelessWidget {
     final route = bus && o.frames.containsKey(0x238)
         ? o.navRoute
         : bt.navDest != null || mins > 0;
-    if (!route) return const SizedBox.shrink();
+    if (!route) {
+      return tall
+          ? const Text('NO ROUTE', style: TextStyle(fontSize: 14, letterSpacing: 2, color: Colors.white38))
+          : const SizedBox.shrink();
+    }
     final trip = mins > 0; // none yet, or a finished route's zeros
     final m = mins.round();
     // At arrival: the battery % worked out from the bus, else the
@@ -231,6 +288,21 @@ class _Nav extends StatelessWidget {
     // Nothing to put on the line yet (the route's fields come round slowly).
     final blank = !trip && dist == null && energy == null && (oneLine || length == null);
     if (oneLine) return blank ? const SizedBox.shrink() : card(line);
+    if (tall) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 240),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, spacing: 6, children: [
+          if (bt.navDest case final dest?)
+            Text(dest, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, color: Colors.white))
+          else
+            const Text('DESTINATION', style: TextStyle(fontSize: 11, letterSpacing: 1.5, color: Colors.white70)),
+          if (trip) ...[stat(Icons.hourglass_bottom, togo), stat(Icons.flag, clock)],
+          if (length != null) stat(Icons.route, length),
+          if (dist != null) stat(Icons.electric_car, dist, note: drop <= 0 ? null : ' −$drop'),
+          ?battery,
+        ]),
+      );
+    }
     return card(Column(mainAxisSize: MainAxisSize.min, children: [
       // Its name, top centre, with the place beside it once Bluetooth has
       // one: two lines at most, so the bar grows no taller.
@@ -335,11 +407,13 @@ class _Controls extends StatelessWidget {
     required this.onWifi,
     required this.onBt,
     required this.onMaps,
+    this.nav = true,
   });
 
   final Panda obd;
   final Commander bt;
   final VoidCallback onWifi, onBt, onMaps;
+  final bool nav; // the route in the bar (basic has it on a card)
 
   @override
   Widget build(BuildContext context) {
@@ -395,7 +469,7 @@ class _Controls extends StatelessWidget {
             settled: bt.link == BtLink.lean || bt.link == BtLink.full,
             tip: 'Commander: ${bt.status}', onTap: onBt),
         // Charging takes the route's place, as in the compact dash.
-        Expanded(child: obd.wifiLive && obd.charging ? const SizedBox() : _Nav(obd: obd, bt: bt)),
+        Expanded(child: !nav || obd.wifiLive && obd.charging ? const SizedBox() : _Nav(obd: obd, bt: bt)),
         IconButton(
           visualDensity: VisualDensity.compact,
           icon: const Icon(Icons.map_outlined, color: Colors.white),

@@ -296,6 +296,65 @@ void main() {
     });
   }
 
+  // The basic layout: the ring between two stacks of cards, one card of
+  // each showing; a swipe up brings the next. DASH_SHOT writes both views.
+  testWidgets('basic layout: cards beside the ring, swiped', (t) async {
+    t.view
+      ..physicalSize = const Size(823.5, 384) * _dpr
+      ..devicePixelRatio = _dpr;
+    final (_, car) = _shots['city-turn']!;
+    final o = car()
+      ..navRoute = true
+      ..navMinutes = 9
+      ..navEnergyKwh = 48.8; // at arrival: 1.8 kWh of the 50.6 left
+    final key = GlobalKey();
+    await t.pumpWidget(MaterialApp(
+        theme: kTheme,
+        debugShowCheckedModeBanner: false,
+        home: RepaintBoundary(
+            key: key,
+            child: DashPage(
+                demo: o,
+                basic: true,
+                bt: Commander()
+                  ..show(BtLink.lean, 'ready')
+                  ..navDest = 'Central Market'
+                  ..navMiles = 3.1
+                  ..navMinutes = 9))));
+    await t.pump(const Duration(milliseconds: 300));
+    await t.runAsync(() => Future.wait([
+          for (final e in find.byType(Image).evaluate()) precacheImage((e.widget as Image).image, e),
+        ]));
+    await t.pump();
+    Future<void> shot(String name) async {
+      final out = Platform.environment['DASH_SHOT'];
+      if (out == null) return;
+      await t.runAsync(() async {
+        final img = await (key.currentContext!.findRenderObject() as RenderRepaintBoundary).toImage(pixelRatio: _dpr);
+        final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+        File('$out/$name.png').writeAsBytesSync(bytes!.buffer.asUint8List());
+      });
+    }
+
+    // First cards: the figures left, the buttons right; no route in the bar.
+    expect(find.text('OUTSIDE'), findsOneWidget);
+    expect(find.byType(PageView), findsNWidgets(2));
+    expect(find.text('Central Market'), findsNothing);
+    await shot('basic-1');
+    // Swipe both stacks up: the car left, the route right.
+    for (final pv in find.byType(PageView).evaluate().toList()) {
+      await t.drag(find.byWidget(pv.widget), const Offset(0, -300));
+    }
+    await t.pumpAndSettle();
+    await t.runAsync(() => Future.wait([
+          for (final e in find.byType(Image).evaluate()) precacheImage((e.widget as Image).image, e),
+        ]));
+    await t.pump();
+    expect(find.text('Central Market'), findsOneWidget);
+    await shot('basic-2');
+    await t.pumpWidget(const SizedBox());
+  });
+
   // The nav bar: shown only with a route; the Commander's minutes and % at
   // arrival over the bus's kWh; a long destination trims rather than wraps.
   for (final parked in [false, true]) {
