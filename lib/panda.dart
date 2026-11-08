@@ -95,24 +95,22 @@ class Panda extends ChangeNotifier {
 
   double? pedalPct;
 
-  /// How hard the brake is pressed, %, for the ring. ponytail: not set from
-  /// the car yet. ID38D's master cylinder pressure ([_brakeBar]) did not follow
-  /// the pedal in the car, so it and two other candidates are traced until a
-  /// drive shows which does; the ring shows no brake meanwhile (null).
+  /// How hard the brake is pressed, %, for the ring: the friction brakes'
+  /// torque at all four wheels (ID185) against [brakeFullNm].
   double? brakePct;
-  double? _brakeBar, _rodBB, _rodIB;
+  final _brakeNm = <String, double>{};
 
   /// Android's installer refused or the user cancelled an in-app update
   /// (it shares this class's native channel); the dash says so.
   void Function(String why)? onUpdateFailed;
 
-  /// The steering wheel's angle from ID129, deg (on trial: traced only).
+  /// The steering wheel's angle from ID129, deg, as the car sends it.
   double? _steerSccm;
 
   /// The steering wheel's angle, deg, left positive: the car picture's path
   /// lines, from ID129 ([_steerSccm]) with its sign flipped: the car's own
   /// reading is positive to the right (seen in the car, 2026-11-08). Its
-  /// range is the DBC's, unchecked; ID370 stands by should ID129 not come.
+  /// range is the DBC's; seen in the car from -399 to +258.
   double? get steerDeg => _steerDeg;
   set steerDeg(double? v) {
     _steerDeg = v;
@@ -134,18 +132,10 @@ class Panda extends ChangeNotifier {
     return v.abs() >= steerShowDeg || (at != null && DateTime.now().difference(at) < const Duration(seconds: 2));
   }
 
-  /// EPAS3S_internalSAS from the newest ID370, deg: 14 bits big-endian from
-  /// bit 37, i.e. the low 6 bits of byte 4 then byte 5.
-  String? _epasAngle() {
-    final d = frames[0x370]?.data;
-    if (d == null || d.length < 6) return null;
-    return (((d[4] & 0x3F) << 8 | d[5]) * 0.1 - 819.2).toStringAsFixed(1);
-  }
-
-  /// The pressure the ring calls full braking.
-  /// ponytail: a guess (a firm stop is some tens of bar); set it from a
-  /// drive's trace, its 'mc=' column.
-  static const brakeFullBar = 80.0;
+  /// The four wheels' brake torque the ring calls full braking, Nm.
+  /// ponytail: a guess (a 2 t car stopping at 0.6 g takes about 4000 Nm at
+  /// its wheels); set it from a hard stop's 'brake Nm=' in the trace.
+  static const brakeFullNm = 4000.0;
   double? socPct;
   double? rangeMi;
   double? speedLimit;
@@ -420,9 +410,8 @@ class Panda extends ChangeNotifier {
         'bt ${b == null ? '-' : (b.keys.where((k) => b[k] is num).toList()..sort()).map((k) => '$k=${b[k]}').join(' ')} | '
         'now 118 ${hexOf(frames[0x118]?.data ?? const [])} 2b6 ${hexOf(frames[0x2B6]?.data ?? const [])} '
         'brake=$braking slippery=$slippery | '
-        'brake mc=$_brakeBar bb=$_rodBB ib=$_rodIB | ${raw(0x38D)} | ${raw(0x3AF)} | ${raw(0x39D)} | '
-        'steer sccm=$_steerSccm/${frames[0x129]?.count ?? 0} epas=${_epasAngle()}/${frames[0x370]?.count ?? 0} '
-        '${hexOf(frames[0x129]?.data ?? const [])} / ${hexOf(frames[0x370]?.data ?? const [])}';
+        'brake Nm=${_brakeNm.values.fold(0.0, (a, b) => a + b).toStringAsFixed(0)} pct=${brakePct?.toStringAsFixed(1)} | ${raw(0x185)} | '
+        'steer sccm=$_steerSccm/${frames[0x129]?.count ?? 0} ${hexOf(frames[0x129]?.data ?? const [])}';
   }
 
   /// Every signal as decoded from the newest payload that carries it (a
@@ -876,7 +865,8 @@ class Panda extends ChangeNotifier {
     speed = 0;
     frontKw = rearKw = pedalPct = packKw = _packV = _frontAt = _rearAt = _other = null;
     lvKw = _compKw = _heatLKw = _heatRKw = _lvV = null;
-    _brakeBar = _rodBB = _rodIB = brakePct = _steerSccm = steerDeg = null;
+    brakePct = _steerSccm = steerDeg = null;
+    _brakeNm.clear();
     _compOk = false;
   }
 
@@ -946,7 +936,7 @@ class Panda extends ChangeNotifier {
     0x2E5, 0x266, 0x33A, 0x332, 0x352, 0x392, // motor power, soc, cells, energy
     0x347, 0x238, 0x3FD, 0x321, 0x2F3, 0x25A, 0x273, // nav, outside, climate, tyres, tilt
     0x472, 0x333, 0x33B, // charging: reason, limit, time
-    0x129, // steering angle, live for the path lines (100 a second, by the DBC)
+    0x129, 0x185, // steering angle and brake torque, live for the path lines and ring
     0x219, 0x243, // not on this car's stream
   };
 
@@ -955,10 +945,7 @@ class Panda extends ChangeNotifier {
     (parked: false, ids: [0x3A1]), // belts' chime, battery heating: 17
     (parked: false, ids: [0x3C2, 0x31A]), // buckles: 22
     (parked: false, ids: [0x102, 0x103, 0x3E2]), // doors, trunk, map lights: 22
-    // With the other steering frame on trial (100 a second, by the DBC).
-    // With the steering frame ID370 and the brake's three candidates on trial
-    // (each 25-100 a second, by the DBC).
-    (parked: false, ids: [0x252, 0x2A7, 0x2B4, 0x370, 0x38D, 0x3AF, 0x39D]), // regen limit, draws: 26
+    (parked: false, ids: [0x252, 0x2A7, 0x2B4]), // regen limit, draws: 26
     (parked: false, ids: [0x2B3]), // cabin temperatures, CO2, heater: 14
     // In any gear, or a charge ended just before driving off would read as
     // charging all the way; and on throughout a charge, for its live power.
@@ -1392,12 +1379,9 @@ class Panda extends ChangeNotifier {
         case 'steerSccm':
           _steerSccm = v;
           steerDeg = -v; // the path lines: this frame is positive to the right, as the car showed
-        case 'brakeBar':
-          _brakeBar = v;
-        case 'rodBB':
-          _rodBB = v;
-        case 'rodIB':
-          _rodIB = v;
+        case 'brakeFL' || 'brakeFR' || 'brakeRL' || 'brakeRR':
+          _brakeNm[e.key] = v;
+          brakePct = (_brakeNm.values.fold(0.0, (a, b) => a + b) / brakeFullNm * 100).clamp(0.0, 100.0);
         case 'compV':
           _compOk = v >= 200 && v <= 600 && (v - (_packV ?? v)).abs() < 40;
         case 'compW':

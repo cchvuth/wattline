@@ -688,19 +688,15 @@ void main() {
     expect(p.frontKw, isNull);
   });
 
-  // On trial: both steering frames are subscribed and traced, decoded as
-  // the DBC has them (0x129 little-endian, 0x370 big-endian).
-  test('steering angle frames reach the trace', () {
+  // ID129, positive to the right as the car sends it; the path lines take
+  // it left positive.
+  test('steering angle reaches the path lines and the trace', () {
     final p = Panda()
       // 0x129: raw 8462 at 16|14 = 846.2 - 819.2 = 27.0 deg.
-      ..onFrame(0x129, 1, [0, 0, 0x0E, 0x21, 0, 0, 0, 0])
-      // 0x370: raw 7832 = 0x1E98 from bit 37 big-endian = -36.0 deg.
-      ..onFrame(0x370, 1, [0, 0, 0, 0, 0x1E, 0x98, 0, 0]);
-    final line = p.traceLine();
-    expect(line, contains('sccm=27.0'));
-    expect(line, contains('epas=-36.0'));
-    expect(kSubscribeIds, containsAll([0x129, 0x370]));
-    expect(p.steerDeg, -27.0); // ID129 drives the path lines, positive left
+      ..onFrame(0x129, 1, [0, 0, 0x0E, 0x21, 0, 0, 0, 0]);
+    expect(p.traceLine(), contains('sccm=27.0'));
+    expect(Panda.alwaysOn, contains(0x129));
+    expect(p.steerDeg, -27.0);
   });
 
   test('the path lines stay 2 s after the wheel is fairly straight', () async {
@@ -716,20 +712,20 @@ void main() {
     expect(p.steerLines, isFalse);
   });
 
-  // The brake's three candidates are decoded for the trace; none drives the
-  // ring (brakePct stays null) until a drive shows which follows the pedal.
-  // 0x38D ESP_brakeMasterCylPress 44|10 x0.3 -30 bar.
-  test('brake candidates reach the trace, and the ring shows no brake yet', () {
-    final p = Panda()
-      ..onFrame(0x38D, 1, [0, 0, 0, 0, 0, 0x60, 0x0E]) // raw 230: 39 bar
-      ..onFrame(0x3AF, 1, [0, 0, 0, 0x0C, 0, 0, 0, 0]) // BB_sInputRod
-      ..onFrame(0x39D, 1, [0, 0, 0x20, 0, 0]); // IBST_sInputRodDriver
-    final line = p.traceLine();
-    expect(line, contains('mc=39.0'));
-    expect(line, contains('bb='));
-    expect(line, contains('ib='));
-    expect(p.brakePct, isNull);
-    expect(kSubscribeIds, containsAll([0x38D, 0x3AF, 0x39D]));
+  // ID185 ESP_brakeTorque: four 12-bit wheel torques x2 Nm, summed against
+  // Panda.brakeFullNm. Payloads from a capture-all in the car: a light
+  // press (40/40/20/20 Nm) and released.
+  test('the brake from the wheels\' torque', () {
+    final p = Panda()..onFrame(0x185, 1, [0x14, 0x40, 0x01, 0x0A, 0xA0, 0x00, 0x54, 0xD9]);
+    expect(p.brakePct, closeTo(120 / Panda.brakeFullNm * 100, 1e-9));
+    expect(p.traceLine(), contains('brake Nm=120'));
+    p.onFrame(0x185, 1, [0, 0, 0, 0, 0, 0, 0x04, 0x8A]);
+    expect(p.brakePct, 0);
+    // Past full: the ring's foot at its widest, no further. 0xFFF x2 each.
+    p.onFrame(0x185, 1, [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0]);
+    expect(p.brakePct, 100);
+    expect(Panda.alwaysOn, contains(0x185));
+    expect(kSubscribeIds, isNot(contains(0x38D)));
   });
 
   test('other draws: climate, 12 V and the rest of the pack-motor gap', () {

@@ -68,7 +68,7 @@ void _drive(Panda o, double real) {
     ..rearKw = power * rear
     ..frontKw = power * (1 - rear)
     ..braking = regen > 18 || brake > 2
-    ..brakePct = brake < 2 ? 0 : brake / Panda.brakeFullBar * 100
+    ..brakePct = brake < 2 ? 0 : brake / 80 * 100 // bar of 80
     ..steerDeg = steer
     ..indR = signalling
     ..blinkLit = signalling && ((real - 4.8 * _secs / 10) * 1000 ~/ 361).isEven // the car's 361 ms half cycle

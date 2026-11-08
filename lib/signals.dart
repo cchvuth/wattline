@@ -63,22 +63,18 @@ const kSignals = <String, Sig>{
   // driving on it and coasting, and clear in P; so it lights the dash's lamp
   // as the car lights its own. Bits 48-50 beside it stay 0.
   'brake': Sig(0x118, 51, 1),
-  // How hard the brake is pressed, for the ring: three candidates from the
-  // 2026.26 Model Y party DBC, polled and traced side by side until a drive
-  // shows which follows the pedal. ID38D's master cylinder pressure was
-  // tried first and, seen in the car, wandered low with no tie to the pedal.
-  'brakeBar': Sig(0x38D, 44, 10, scale: 0.3, offset: -30, sna: 1023), // ESP_brakeMasterCylPress, bar
-  'rodBB': Sig(0x3AF, 26, 12, scale: 0.015625, offset: -5), // BB_sInputRod, mm
-  'rodIB': Sig(0x39D, 21, 12, scale: 0.015625, offset: -5), // IBST_sInputRodDriver, mm
-  // The steering wheel's angle, deg, for drawing the front wheels: on trial,
-  // traced not shown, as neither frame has been seen on this car. ID129
-  // SCCM_steeringAngle (2026.26 Model Y DBC, which notes it unseen on a
-  // vehicle bus; the Model 3's long-known layout). ID370 EPAS3S_sysStatus
-  // carries EPAS3S_internalSAS big-endian (37|14@0, x0.1 -819.2), which
-  // decode() does not read: Panda.traceLine works it out from the bytes;
-  // this, its quality bit, only puts the frame on the subscription.
+  // How hard the brake is pressed, for the ring: ID185 ESP_brakeTorque, the
+  // friction brakes' torque at each wheel, Nm (Model 3 DBC; 33 a second on
+  // this car). A capture-all in the car read 40/40/20/20 under a light
+  // press and 0 released. The pressure and rod-travel frames of the party
+  // DBC (0x38D, 0x3AF, 0x39D) never followed the pedal or never came.
+  'brakeFL': Sig(0x185, 0, 12, scale: 2),
+  'brakeFR': Sig(0x185, 12, 12, scale: 2),
+  'brakeRL': Sig(0x185, 24, 12, scale: 2),
+  'brakeRR': Sig(0x185, 36, 12, scale: 2),
+  // The steering wheel's angle, deg, for the path lines: ID129
+  // SCCM_steeringAngle (positive to the right on this car).
   'steerSccm': Sig(0x129, 16, 14, scale: 0.1, offset: -819.2),
-  'steerEpasQf': Sig(0x370, 4, 1),
 
   // ID2E5 FrontInverterPower / ID266 RearInverterPower. Firmware 2026.38
   // repacked both into 7 bytes: the power moved from 0|11 to 41|11, after
