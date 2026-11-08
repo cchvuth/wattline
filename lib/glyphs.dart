@@ -6,7 +6,10 @@ import 'package:flutter/material.dart';
 /// ends. Frunk, trunk, recirculation, charge port and the doors are the
 /// car's own icons: traced from photos of its screen and of its manual door
 /// release, then cleaned up as vectors. The headlamps are the standard
-/// symbols the car's indicators use. Code, not files: nothing to load.
+/// symbols the car's indicators use. Autopilot is the car's own steering
+/// wheel, traced from its screen into docs/icons/autopilot.svg (on its disc)
+/// and drawn here from the same path; cruise is a gauge. Code, not files:
+/// nothing to load.
 enum Glyph {
   frunk,
   trunk,
@@ -24,6 +27,8 @@ enum Glyph {
   grip,
   fan,
   fanOff,
+  autopilot,
+  cruise,
 }
 
 class GlyphIcon extends StatelessWidget {
@@ -141,6 +146,15 @@ class _GlyphPainter extends CustomPainter {
             ..drawLine(a, b, line)
             ..restore();
         }
+      case Glyph.autopilot:
+        // The wheel alone, filled: docs/icons/autopilot.svg's path, whose
+        // disc (radius 12) the caller paints behind it in the state's colour.
+        canvas.drawPath(_autopilotWheel, Paint()..color = color);
+      case Glyph.cruise:
+        // The cruise gauge: an arc open at its foot, the needle up and right.
+        canvas.drawArc(Rect.fromCircle(center: const Offset(12, 13.6), radius: 8.8), pi * 5 / 6, pi * 4 / 3, false, line);
+        canvas.drawLine(const Offset(12, 13.6), const Offset(16.4, 8.6), line);
+        canvas.drawCircle(const Offset(12, 13.6), 1.7, Paint()..color = color);
       default:
     }
   }
@@ -148,6 +162,49 @@ class _GlyphPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GlyphPainter old) => old.glyph != glyph || old.color != color;
 }
+
+/// The Autopilot wheel on the 24 grid: a round rim of radius 7.9 with its
+/// three windows cut out (the top one, and the left mirrored for the right).
+final _autopilotWheel = Path()
+  ..fillType = PathFillType.evenOdd
+  ..addOval(Rect.fromCircle(center: const Offset(12, 12), radius: 7.9))
+  // top
+  ..moveTo(12.68, 5.46)
+  ..cubicTo(14.02, 5.6, 15.14, 6.04, 16.19, 6.86)
+  ..cubicTo(17.26, 7.69, 18.11, 8.9, 18.43, 10.03)
+  ..cubicTo(18.64, 10.78, 18.56, 10.98, 18.04, 10.98)
+  ..cubicTo(17.67, 10.98, 17.13, 10.89, 16.7, 10.76)
+  ..cubicTo(16.63, 10.74, 16.48, 10.7, 16.37, 10.66)
+  ..cubicTo(16.26, 10.63, 15.79, 10.48, 15.32, 10.32)
+  ..cubicTo(13.44, 9.69, 12.71, 9.56, 11.55, 9.65)
+  ..cubicTo(10.64, 9.72, 9.93, 9.9, 8.11, 10.5)
+  ..cubicTo(6.83, 10.93, 6.56, 11, 6.05, 10.98)
+  ..cubicTo(5.54, 10.96, 5.48, 10.83, 5.66, 10.1)
+  ..cubicTo(6.27, 7.72, 8.92, 5.65, 11.63, 5.45)
+  ..cubicTo(11.8, 5.44, 12.51, 5.44, 12.68, 5.46)
+  ..close()
+  // left
+  ..moveTo(6.9, 12.93)
+  ..cubicTo(7.68, 13.05, 8.65, 13.65, 9.64, 14.64)
+  ..cubicTo(10.47, 15.47, 10.91, 16.6, 10.92, 17.88)
+  ..cubicTo(10.92, 18.3, 10.82, 18.46, 10.54, 18.53)
+  ..cubicTo(10.17, 18.63, 9.32, 18.31, 8.62, 17.8)
+  ..cubicTo(8.55, 17.75, 8.43, 17.66, 8.35, 17.61)
+  ..cubicTo(7.41, 16.93, 6.41, 15.83, 6.01, 15.03)
+  ..cubicTo(5.65, 14.3, 5.51, 13.6, 5.69, 13.33)
+  ..cubicTo(5.89, 13.01, 6.36, 12.86, 6.9, 12.93)
+  ..close()
+  // right
+  ..moveTo(17.1, 12.93)
+  ..cubicTo(16.32, 13.05, 15.35, 13.65, 14.36, 14.64)
+  ..cubicTo(13.53, 15.47, 13.09, 16.6, 13.08, 17.88)
+  ..cubicTo(13.08, 18.3, 13.18, 18.46, 13.46, 18.53)
+  ..cubicTo(13.83, 18.63, 14.68, 18.31, 15.38, 17.8)
+  ..cubicTo(15.45, 17.75, 15.57, 17.66, 15.65, 17.61)
+  ..cubicTo(16.59, 16.93, 17.59, 15.83, 17.99, 15.03)
+  ..cubicTo(18.35, 14.3, 18.49, 13.6, 18.31, 13.33)
+  ..cubicTo(18.11, 13.01, 17.64, 12.86, 17.1, 12.93)
+  ..close();
 
 final _traced = <Glyph, (List<Path>, List<Path>)>{
   Glyph.frunk: (_frunkStrokes, _frunkFills),

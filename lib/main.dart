@@ -937,22 +937,51 @@ class _DashPageState extends State<DashPage> {
   }
 
   /// The speed and power ring, the same in both layouts.
-  Widget _ring(Panda o) => AspectRatio(
+  /// The speed and power ring, the same in both layouts, with the assist
+  /// state at its top right: just outside the ring's arc, a little below its
+  /// box's corner. [outside]: the air outside at its bottom left, likewise
+  /// clear of the arc (the full layout; basic has it on a card).
+  Widget _ring(Panda o, {bool outside = false}) => AspectRatio(
         aspectRatio: 1,
-        child: ListenableBuilder(
-          listenable: o.fast,
-          builder: (context, _) => RingGauge(
-            glideAll: _smooth,
-            frontKw: o.live ? o.frontKw : null,
-            rearKw: o.live ? o.rearKw : null,
-            rearOnly: o.rwd,
-            pedalPct: o.live ? o.pedalPct : null,
-            brakePct: o.live ? o.brakePct : null,
-            regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
-            // Digital speed sits in the ring, the gear under it.
-            child: _Centre(obd: o, gear: true),
-          ),
-        ),
+        child: LayoutBuilder(builder: (context, box) {
+          const size = 40.0;
+          // As RingGauge draws it: radius r, the motors' arcs 8.5 % of r wide.
+          final half = box.maxWidth / 2, r = half - 6, d = r * 1.0425 + size / 2 + 5;
+          const a = -38 * pi / 180, b = 130 * pi / 180;
+          // The temperature's top right corner just clear of the arc.
+          final c = r * 1.0425 + 6;
+          final icon = _autopilot(o, size: size);
+          return Stack(clipBehavior: Clip.none, children: [
+            Positioned.fill(
+              child: ListenableBuilder(
+                listenable: o.fast,
+                builder: (context, _) => RingGauge(
+                  glideAll: _smooth,
+                  frontKw: o.live ? o.frontKw : null,
+                  rearKw: o.live ? o.rearKw : null,
+                  rearOnly: o.rwd,
+                  pedalPct: o.live ? o.pedalPct : null,
+                  brakePct: o.live ? o.brakePct : null,
+                  regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
+                  // Digital speed sits in the ring, the gear under it.
+                  child: _Centre(obd: o, gear: true),
+                ),
+              ),
+            ),
+            if (icon != null)
+              Positioned(
+                left: half + d * cos(a) - size / 2,
+                top: half + d * sin(a) - size / 2,
+                child: icon,
+              ),
+            if (outside)
+              Positioned(
+                right: box.maxWidth - (half + c * cos(b)),
+                top: half + c * sin(b),
+                child: _Outside(obd: o),
+              ),
+          ]);
+        }),
       );
 
   bool _compactNow = false;
@@ -965,10 +994,10 @@ class _DashPageState extends State<DashPage> {
   /// each showing, swiped up or down for the next. Each card answers one
   /// question, its graphic taking the room its text leaves: energy (the
   /// battery, what the pack feeds besides the motors or the charge, the
-  /// pack's health), the drive (lamps and grip, assist, g-meter, the air
-  /// outside), the car as large as it fits (lowered for its beams ahead),
-  /// the buttons, the route. Both stacks hold
-  /// every card, so either side shows any; each side's card is kept.
+  /// pack's health), the drive (lamps and grip, g-meter, the air outside),
+  /// the car as large as it fits (lowered for its beams ahead), the buttons,
+  /// the route. Both stacks hold every card, so either side shows any; each
+  /// side's card is kept. The assist state is at the ring's top right.
   Widget _basicRow(Panda o) {
     List<Widget> cards() => [
           Column(children: [
@@ -982,10 +1011,8 @@ class _DashPageState extends State<DashPage> {
             ]),
           ]),
           Column(children: [
-            // The lamps and grip on top, then the assist state.
+            // The lamps and grip on top (the assist state is by the ring).
             _Lights(obd: o),
-            const SizedBox(height: 4),
-            ?_autopilot(o),
             const SizedBox(height: 6),
             // The g-meter (WiFi only), as big as the room.
             Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
@@ -993,7 +1020,7 @@ class _DashPageState extends State<DashPage> {
             // The air outside.
             _Pack(obd: o, pack: false),
           ]),
-          _Fill(_Cabin(obd: o, draws: false), top: 0.14),
+          _Fill(_Cabin(obd: o), top: 0.14),
           _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),
@@ -1080,26 +1107,48 @@ class _DashPageState extends State<DashPage> {
                     Expanded(
                       child: _basic ? _basicRow(o) : Row(children: [
                         _Actions(obd: o, bt: _bt, onTap: _press),
-                        Expanded(child: _SideColumn(children: [
-                          _Lights(obd: o),
-                          _Cabin(obd: o),
-                        ])),
-                        _ring(o),
-                        // The battery dial and the pack's figures pinned top and
-                        // bottom, so they stay put as cards come and go between
-                        // them; the dial's top level with the first button's.
+                        // The lamps, and under them the car as large as the
+                        // room left (its figures with it).
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                            child: Column(children: [
+                              _Lights(obd: o),
+                              const SizedBox(height: 4),
+                              Expanded(child: FittedBox(child: _Cabin(obd: o))),
+                            ]),
+                          ),
+                        ),
+                        _ring(o, outside: true),
+                        // The g-meter and the pack's figures pinned top and
+                        // bottom, the battery dial large between them. The g-meter's
+                        // top is level with the first button's, its place kept
+                        // while it has nothing to say (parked it only reads 0;
+                        // no WiFi, no reading), so the dial does not jump.
                         Expanded(child: Column(children: [
-                          Padding(padding: const EdgeInsets.fromLTRB(8, 14, 8, 0), child: _Battery(obd: o)),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 14, 8, 0),
+                            child: Visibility.maintain(
+                              visible: o.wifiLive && !o.charging && o.gear != 'P' && (o.gLong != null || o.gLat != null),
+                              child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o)),
+                            ),
+                          ),
                           Expanded(child: _SideColumn(children: [
-                            ?_autopilot(o),
+                            _Battery(obd: o, width: 128),
                             if (o.wifiLive && o.charging) _Charge(obd: o),
-                            // The g-meter once WiFi brings it, out of P (parked
-                            // it only reads 0); charging, the charge card has
-                            // its place.
-                            if (o.wifiLive && !o.charging && o.gear != 'P' && (o.gLong != null || o.gLat != null))
-                              ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o)),
                           ])),
-                          Padding(padding: const EdgeInsets.only(bottom: 4), child: _Pack(obd: o)),
+                          // What the pack feeds besides the motors (WiFi), and
+                          // its health; the air outside is by the ring.
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                                if (o.wifiLive && o.otherKw != null) _Draws(obd: o),
+                                _Pack(obd: o, outside: false),
+                              ]),
+                            ),
+                          ),
                         ])),
                         _Actions(obd: o, bt: _bt, onTap: _press, right: true),
                       ]),
@@ -1126,22 +1175,33 @@ class _DashPageState extends State<DashPage> {
   }
 }
 
-/// The driver-assist state, lit while it steers; over it, the car's
-/// hands-on nag: amber to look, red once it chimes, slows or locks
-/// Autopilot out for the drive.
-Widget? _autopilot(Panda o) {
-  final nag = switch (o.live ? o.handsOn : null) {
-    3 => ('HOLD WHEEL', kWarn),
-    4 || 5 || 9 || 10 => ('HOLD WHEEL', kAlert),
-    6 => ('SLOWING', kAlert),
-    7 => ('AP LOCKED', kAlert),
-    _ => null,
-  };
-  if (nag case (final text, final color)) return _Pill(text, live: true, color: color);
+/// The driver-assist state as the car shows it, its Autopilot wheel on a
+/// disc: grey while Autosteer is ready (or has just ended), blue while it
+/// steers (Autopilot, Navigate on Autopilot, FSD); the cruise gauge on blue
+/// while TACC alone holds the speed. The hands-on nag flashes it amber; red
+/// flashing while it slows the car or says to take over, red and struck
+/// through once it locks Autopilot out (grey and struck through on a fault).
+/// Its words on a long press.
+Widget? _autopilot(Panda o, {double size = 30}) {
+  const blue = Color(0xFF0048FF), grey = Color(0xFF5E5E5E); // the car's own blue
+  final nag = o.live ? o.handsOn : null;
   final ap = o.autopilot;
-  return ap == null
-      ? null
-      : _Pill(ap, live: ap.contains('AUTOPILOT') || ap.startsWith('NAV') || ap == 'FSD');
+  final state = switch (nag) {
+    3 || 4 || 5 || 9 || 10 => (kWarn, Glyph.autopilot, true, false, 'HOLD WHEEL'),
+    6 => (kAlert, Glyph.autopilot, true, false, 'SLOWING'),
+    7 => (kAlert, Glyph.autopilot, false, true, 'AP LOCKED'),
+    _ => switch (ap) {
+        null => null,
+        'TACC' => (blue, Glyph.cruise, false, false, ap),
+        'AUTOPILOT' || 'NAV ON AP' || 'FSD' => (blue, Glyph.autopilot, false, false, ap),
+        'AP ENDING' => (kAlert, Glyph.autopilot, true, false, 'TAKE OVER'),
+        'AP FAULT' => (grey, Glyph.autopilot, false, true, ap),
+        _ => (grey, Glyph.autopilot, false, false, ap), // ready, or just ended
+      },
+  };
+  if (state == null) return null;
+  final (disc, glyph, flash, struck, words) = state;
+  return _ApIcon(disc: disc, glyph: glyph, flash: flash, struck: struck, words: words, size: size);
 }
 
 /// The dash in half a screen, beside Google Maps or any other split: speed

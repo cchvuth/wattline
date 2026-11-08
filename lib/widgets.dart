@@ -137,6 +137,130 @@ class _SideColumn extends StatelessWidget {
       );
 }
 
+/// The air outside by the ring (ice blue near freezing), over it its name,
+/// or in its place, amber, that the washer fluid is low. Right-aligned, as
+/// it sits to the left of the arc.
+class _Outside extends StatelessWidget {
+  const _Outside({required this.obd});
+
+  final Panda obd;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = obd, c = o.outsideC, washer = o.wifiLive && o.washerLow;
+    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
+      Text(washer ? 'WASHER LOW' : 'OUTSIDE',
+          style: TextStyle(fontSize: 10, height: 1.2, letterSpacing: 1, color: washer ? kWarn : Colors.white54)),
+      Text(c == null ? '—' : _deg(c),
+          style: TextStyle(
+              fontSize: 18,
+              height: 1.15,
+              color: c != null && c <= 3 ? kCold : Colors.white,
+              fontFeatures: const [FontFeature.tabularFigures()])),
+    ]);
+  }
+}
+
+/// The Autopilot icon ([_autopilot]): its glyph on a [disc] of that colour,
+/// white on it (dark on amber, which white does not read on), [flash]ing
+/// twice a second, [struck] through when locked out.
+class _ApIcon extends StatefulWidget {
+  const _ApIcon({
+    required this.disc,
+    required this.glyph,
+    required this.flash,
+    required this.struck,
+    required this.words,
+    required this.size,
+  });
+
+  final Color disc;
+  final Glyph glyph;
+  final bool flash, struck;
+  final String words;
+  final double size;
+
+  @override
+  State<_ApIcon> createState() => _ApIconState();
+}
+
+class _ApIconState extends State<_ApIcon> with SingleTickerProviderStateMixin {
+  late final _blink = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
+
+  @override
+  void initState() {
+    super.initState();
+    _fit();
+  }
+
+  @override
+  void didUpdateWidget(_ApIcon old) {
+    super.didUpdateWidget(old);
+    _fit();
+  }
+
+  void _fit() {
+    if (widget.flash && !_blink.isAnimating) {
+      _blink.repeat(reverse: true);
+    } else if (!widget.flash && _blink.isAnimating) {
+      _blink
+        ..stop()
+        ..value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _blink.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final w = widget, size = w.size;
+    final mark = w.disc == kWarn ? Colors.black : Colors.white;
+    return Tooltip(
+      message: w.words,
+      child: FadeTransition(
+        opacity: Tween(begin: 1.0, end: 0.2).animate(_blink),
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(shape: BoxShape.circle, color: w.disc),
+          // The wheel is drawn to the disc's own size; the gauge smaller.
+          child: Stack(alignment: Alignment.center, children: [
+            GlyphIcon(w.glyph, size: w.glyph == Glyph.autopilot ? size : size * 0.66, color: mark),
+            if (w.struck) CustomPaint(size: Size.square(size), painter: _Strike(w.disc, mark)),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+/// A stroke across the disc, with a gap of the disc's colour each side.
+class _Strike extends CustomPainter {
+  _Strike(this.disc, this.mark);
+
+  final Color disc, mark;
+
+  @override
+  void paint(Canvas canvas, Size s) {
+    final a = Offset(s.width * 0.24, s.height * 0.24), b = Offset(s.width * 0.76, s.height * 0.76);
+    Paint line(Color c, double w) => Paint()
+      ..color = c
+      ..strokeWidth = s.width * w
+      ..strokeCap = StrokeCap.round;
+    canvas
+      ..drawLine(a, b, line(disc, 0.17))
+      ..drawLine(a, b, line(mark, 0.07));
+  }
+
+  @override
+  bool shouldRepaint(_Strike old) => old.disc != disc || old.mark != mark;
+}
+
 /// Basic layout's stack of cards beside the ring: one shows, filling the
 /// side; a swipe up or down brings the next, and dots at the side say
 /// which. Every card is laid out in its card's size over [_scale] and then
@@ -375,35 +499,6 @@ class _Nav extends StatelessWidget {
       ]),
       if (!blank) line,
     ]));
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill(this.text, {required this.live, this.color = kAccent});
-
-  final String text;
-  final bool live;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    // Red solid, not just another hue: it must not pass for the amber
-    // level at a glance, in sunlight or to a colour-blind eye.
-    final solid = live && color == kAlert;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        color: solid ? kAlert : live ? color.withValues(alpha: 0.18) : Colors.white10,
-        border: Border.all(color: live ? color : Colors.white38),
-      ),
-      child: Text(text,
-          style: TextStyle(
-              fontSize: 13,
-              letterSpacing: 1.2,
-              fontWeight: solid ? FontWeight.w700 : null,
-              color: solid ? Colors.white : live ? color : Colors.white70)),
-    );
   }
 }
 
@@ -834,9 +929,10 @@ class _Actions extends StatelessWidget {
 /// with the car's snowflake while too cold for full regen and power, a red
 /// up arrow while it heats, and the target a preconditioning heats it to.
 class _Battery extends StatelessWidget {
-  const _Battery({required this.obd});
+  const _Battery({required this.obd, this.width = 88});
 
   final Panda obd;
+  final double width; // shown this wide, drawn at 104 x 98
 
   @override
   Widget build(BuildContext context) {
@@ -844,10 +940,9 @@ class _Battery extends StatelessWidget {
     final color = (pct ?? 100) < 20 ? kAlert : kRegen;
     final charging = o.wifiLive && o.charging, t = o.packTempC, cold = (t ?? 99) <= 10;
     final heating = o.packHeating || o.precondC != null;
-    // Drawn at 104 x 98 and shown at 85 %, the g-meter under it.
     return SizedBox(
-      width: 88,
-      height: 83,
+      width: width,
+      height: width * 98 / 104,
       child: FittedBox(child: SizedBox(
       width: 104,
       height: 98,
@@ -1449,10 +1544,9 @@ class CarSeats extends StatelessWidget {
 /// it unbuckled (that row's figures then step aside). Not over Bluetooth,
 /// which has none of it; before the stream the saved pressures on the car.
 class _Cabin extends StatelessWidget {
-  const _Cabin({required this.obd, this.draws = true});
+  const _Cabin({required this.obd});
 
   final Panda obd;
-  final bool draws; // the pack's other draws beside the car (basic: own card)
 
   @override
   Widget build(BuildContext context) {
@@ -1469,7 +1563,6 @@ class _Cabin extends StatelessWidget {
     // As tall as the column allows: the rows' figures sit on the seats.
     final dir = _Car.dir(o.thirdRow);
     final carH = scale(236), carW = carH * _Car.aspect; // the image's own shape
-    final sideW = scale(62);
     // A tyre's psi on the body over its wheel: between the outline and the
     // seats, as far in from each side (the mirrors make the image wider than
     // the body, the left more than the right).
@@ -1477,39 +1570,39 @@ class _Cabin extends StatelessWidget {
           left: left ? carW * _Car.tyreL : null,
           right: left ? null : carW * _Car.tyreR,
           width: carW * _Car.tyreW,
-          top: carH * at - scale(13),
-          height: scale(26),
+          top: carH * at - scale(15),
+          height: scale(30),
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             Text(bar == null ? '—' : (bar * 14.5038).round().toString(),
                 style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 12,
+                    fontSize: 14,
                     height: 1.1,
                     fontWeight: FontWeight.w600,
                     fontFeatures: [FontFeature.tabularFigures()],
                     shadows: [Shadow(blurRadius: 3)])),
             const Text('psi',
-                style: TextStyle(color: Colors.white60, fontSize: 8, height: 1, shadows: [Shadow(blurRadius: 3)])),
+                style: TextStyle(color: Colors.white60, fontSize: 9, height: 1, shadows: [Shadow(blurRadius: 3)])),
           ]),
         );
     // A row's air and fan on a dark pill over its seats, centred on them.
     Widget row(double at, double c, [String? fan]) => Positioned(
           left: carW * _Car.pillL,
           width: carW * _Car.pillW,
-          top: carH * at - scale(fan == null ? 10 : 17),
-          height: scale(fan == null ? 20 : 34),
+          top: carH * at - scale(fan == null ? 11 : 19),
+          height: scale(fan == null ? 22 : 38),
           child: Center(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
               decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Text('${c.round()}°',
-                    style: const TextStyle(fontSize: 14, height: 1.1, fontWeight: FontWeight.w600, color: Colors.white)),
+                    style: const TextStyle(fontSize: 16, height: 1.1, fontWeight: FontWeight.w600, color: Colors.white)),
                 if (fan != null)
                   Row(mainAxisSize: MainAxisSize.min, children: [
-                    GlyphIcon(fan == 'OFF' ? Glyph.fanOff : Glyph.fan, size: 11, color: Colors.white70),
+                    GlyphIcon(fan == 'OFF' ? Glyph.fanOff : Glyph.fan, size: 12, color: Colors.white70),
                     if (fan != 'OFF')
-                      Text(' $fan', style: const TextStyle(fontSize: 10, height: 1.1, color: Colors.white70)),
+                      Text(' $fan', style: const TextStyle(fontSize: 11, height: 1.1, color: Colors.white70)),
                   ]),
               ]),
             ),
@@ -1565,15 +1658,6 @@ class _Cabin extends StatelessWidget {
         ],
       ]),
     );
-    Widget draw(String label, double? kw) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(label, style: const TextStyle(fontSize: 11, letterSpacing: 1, color: Colors.white70)),
-            Text(kw == null ? '—' : '${kw.toStringAsFixed(1)} kW',
-                style: const TextStyle(
-                    fontSize: 15, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()])),
-          ]),
-        );
     // Shrinks rather than overflows in the column beside the ring.
     return FittedBox(
       fit: BoxFit.scaleDown,
@@ -1586,23 +1670,9 @@ class _Cabin extends StatelessWidget {
                 border: Border.all(color: kAlert),
               )
             : null,
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          // The beams reach up over the lamps' row above: the car as big as
-          // the column allows. A little room behind for the brake glow.
-          Padding(padding: EdgeInsets.only(top: scale(4), bottom: scale(6)), child: car),
-          // What the pack feeds besides the motors.
-          if (draws && live && o.otherKw != null) ...[
-            const SizedBox(width: 6),
-            SizedBox(
-              width: sideW,
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                draw('CLIMATE', o.climateKw),
-                draw('12 V', o.lvKw),
-                draw('OTHER', o.otherKw),
-              ]),
-            ),
-          ],
-        ]),
+        // The beams reach up over the lamps' row above. A little room
+        // behind for the brake glow.
+        child: Padding(padding: EdgeInsets.only(top: scale(4), bottom: scale(6)), child: car),
       ),
     );
   }

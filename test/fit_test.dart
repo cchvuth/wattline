@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tesla_dash/commander.dart';
 import 'package:tesla_dash/diag.dart';
 import 'package:tesla_dash/gauge.dart';
+import 'package:tesla_dash/glyphs.dart';
 import 'package:tesla_dash/main.dart';
 import 'package:tesla_dash/panda.dart';
 
@@ -393,7 +394,10 @@ void main() {
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
     await _frames(t);
     expect(find.text('74'), findsOneWidget);
-    expect(find.text('AUTOPILOT'), findsOneWidget);
+    // Autosteer on: the wheel on blue, beside the battery as there is no car
+    // picture to put it by; its words on a long press.
+    expect(find.byTooltip('AUTOPILOT'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyph.autopilot), findsOneWidget);
     expect(find.image(const AssetImage('assets/car/car.png')), findsNothing);
     await t.pumpWidget(const SizedBox());
   });

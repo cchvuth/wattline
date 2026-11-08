@@ -19,8 +19,10 @@ It shows:
 - battery % and range in a small dial like the speed ring (a bolt while
   charging, the arc dim on to the charge limit), and the pedal as a line
   along the top that grows from the centre (not on a rear-motor car);
-- the gear engaged under the speed, speed limit, autopilot state with the
-  car's hands-on nag, and the cruise set speed and follow distance;
+- the gear engaged under the speed, speed limit, and the cruise set speed
+  and follow distance; at the ring's top right the car's Autopilot icon
+  (grey available, blue steering, flashing amber for its hands-on nag), at
+  its bottom left the outside temperature;
 - turn signals, blind spot and brake as glows along the screen edges;
 - the lights on (DRL, low, high), drawn on the car too (light bars front
   and rear, low and high beams as cones ahead, the tail brighter braking,
@@ -64,7 +66,7 @@ frunk, recirculation and interior lights on the right. More actions
 **Basic layout** (picked at the first launch, or a switch in the settings):
 the same ring, with bigger text in a stack of cards on each side, swiped up
 or down. The cards are energy (battery, power use, pack health), drive
-(lights and grip, Autopilot, g-meter, outside), the car, the buttons and
+(lights and grip, g-meter, outside), the car, the buttons and
 the route. Either side can show any card, and each side remembers its own.
 
 | Energy and buttons | Drive and route | The car and energy |

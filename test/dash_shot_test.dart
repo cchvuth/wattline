@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tesla_dash/commander.dart';
 import 'package:tesla_dash/gauge.dart';
+import 'package:tesla_dash/glyphs.dart';
 import 'package:tesla_dash/main.dart';
 import 'package:tesla_dash/panda.dart';
 
@@ -360,6 +361,11 @@ void main() {
     expect(find.text('IMBALANCE'), findsOneWidget);
     expect(find.text('Central Market'), findsNothing);
     expect(o.skip, basicSkip(0, 3)); // only what the ring and these two cards read
+    // The assist state at the ring's top right, whichever cards show.
+    final ring = t.getRect(find.byType(RingGauge));
+    final ap = t.getCenter(find.byTooltip('AP READY'));
+    expect(ap.dx, greaterThan(ring.center.dx + ring.width * 0.3));
+    expect(ap.dy, lessThan(ring.center.dy - ring.height * 0.3));
     await shot('basic-1');
     // One on: the drive left (with the air outside), the route right.
     await swipe(left, 1);
@@ -382,6 +388,71 @@ void main() {
     await swipe(right, -4);
     expect(find.text('CLIMATE'), findsOneWidget);
     await shot('basic-3');
+    await t.pumpWidget(const SizedBox());
+  });
+
+  // The assist state as the car's wheel on a disc at the ring's top right:
+  // grey ready, blue steering, flashing amber for the hands-on nag (the wheel
+  // dark on it), red and still once Autopilot is locked out. The air outside
+  // at the ring's bottom left; the right column reads g-meter, battery, then
+  // the pack's figures.
+  testWidgets('full layout: the Autopilot icon and the air outside by the ring, g-meter over the battery', (t) async {
+    t.view
+      ..physicalSize = const Size(823, 384)
+      ..devicePixelRatio = 1;
+    final o = _car()
+      ..speed = 60
+      ..gear = 'D'
+      ..socPct = 64
+      ..outsideC = 4.5
+      ..gLong = 0.1
+      ..autopilot = 'AP READY';
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
+    await t.pump(const Duration(milliseconds: 300));
+    Color disc(String words) => (t
+            .widget<Container>(find.descendant(of: find.byTooltip(words), matching: find.byType(Container)).first)
+            .decoration as BoxDecoration)
+        .color!;
+    double fade(String words) =>
+        t.widget<FadeTransition>(find.descendant(of: find.byTooltip(words), matching: find.byType(FadeTransition))).opacity.value;
+    final ring = t.getRect(find.byType(RingGauge)), car = t.getRect(find.image(const AssetImage('assets/car/car.png')));
+    final icon = t.getCenter(find.byTooltip('AP READY')), out = t.getRect(find.text('4.5 °C'));
+    expect(icon.dx, greaterThan(ring.center.dx + ring.width * 0.3)); // top right
+    expect(icon.dy, lessThan(ring.center.dy - ring.height * 0.25));
+    expect(disc('AP READY'), const Color(0xFF5E5E5E));
+    expect(out.center.dx, lessThan(ring.center.dx - ring.width * 0.3)); // bottom left
+    expect(out.center.dy, greaterThan(ring.center.dy + ring.height * 0.3));
+    expect(out.left, greaterThan(car.right)); // clear of the car
+    // Neither on the arc: the disc (radius 20) and the text's corner nearest
+    // the ring wholly outside its outer edge.
+    final r = (ring.width / 2 - 6) * 1.0425;
+    expect((icon - ring.center).distance - 20, greaterThan(r));
+    expect((t.getRect(find.text('OUTSIDE')).topRight - ring.center).distance, greaterThan(r));
+    // The g-meter over the battery dial, the pack's figures under it.
+    expect(t.getCenter(find.textContaining('PEAK')).dy, lessThan(t.getCenter(find.text('64%', findRichText: true)).dy));
+    expect(t.getCenter(find.text('IMBALANCE')).dy, greaterThan(t.getCenter(find.text('64%', findRichText: true)).dy));
+    o
+      ..autopilot = 'AUTOPILOT'
+      ..notifyListeners();
+    await t.pump();
+    expect(disc('AUTOPILOT'), const Color(0xFF0048FF));
+    expect(fade('AUTOPILOT'), 1);
+    o
+      ..handsOn = 3
+      ..notifyListeners();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(disc('HOLD WHEEL'), kWarn);
+    expect(t.widget<GlyphIcon>(find.descendant(of: find.byTooltip('HOLD WHEEL'), matching: find.byType(GlyphIcon))).color,
+        Colors.black);
+    expect(fade('HOLD WHEEL'), lessThan(0.9)); // flashing
+    o
+      ..handsOn = 7
+      ..notifyListeners();
+    await t.pump();
+    expect(disc('AP LOCKED'), kAlert);
+    await t.pump(const Duration(milliseconds: 200));
+    expect(fade('AP LOCKED'), 1); // still
     await t.pumpWidget(const SizedBox());
   });
 
