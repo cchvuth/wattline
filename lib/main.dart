@@ -62,20 +62,21 @@ class DashApp extends StatelessWidget {
 const kBasicBase = {
   0x257, 0x118, 0x2E5, 0x266, 0x132, 0x252, 0x185, // speed, gear/pedal/brake lamp, power, regen cap, brake
   0x2A7, 0x2B4, 0x2B3, // climate and 12 V draws: the ring's motor split takes them off the pack
-  0x399, 0x3F5, 0x286, 0x3F8, // limit and blind spots, indicators, cruise set and gap
+  0x399, 0x3F5, 0x286, 0x3F8, // limit, blind spots and assist, indicators, cruise set and gap
+  0x321, // washer fluid low under the speed (and the air outside)
   0x212, 0x472, // charging: the centre's charge power and why it is capped
 };
 const kBasicCards = <Set<int>>[
   {0x33A, 0x332, 0x352, 0x392, 0x3A1, 0x347, 0x333, 0x33B}, // energy: battery, pack heat, health, charge
-  {0x3F6, 0x2B6, 0x101, 0x321}, // drive: lamps, grip, g-meter (yaw), outside
+  {0x3F6, 0x2B6, 0x101}, // drive: lamps, grip, g-meter (yaw)
   {0x3A1, 0x3C2, 0x31A, 0x2F3, 0x25A, 0x219, 0x129, 0x3F6}, // car: belts, fans, tyres, path lines, lamps
   {0x102, 0x103, 0x2E1, 0x25D, 0x273, 0x3E2, 0x243}, // buttons: doors, trunk, frunk, port, tilt, lights, recirc
   {0x238, 0x347, 0x3FD, 0x33A, 0x352}, // route: on a route, energy and minutes, battery now
 ];
 
-/// The basic layout's figures' rows and route, over the full layout's size on
-/// screen (the rest of its cards are bigger still).
-const kBasicFigures = 1.1;
+/// The basic layout's cards over the full layout's size on screen: the
+/// figures and the route a little bigger, the buttons more.
+const kBasicFigures = 1.1, kBasicButtons = 1.22;
 
 /// The ids the basic layout has no use for with these two cards showing.
 Set<int> basicSkip(int left, int right) {
@@ -157,13 +158,12 @@ class _DashPageState extends State<DashPage> {
     _smooth = prefs.getBool('smoothRing') ?? _smooth;
     _minor = prefs.getBool('minorFigures') ?? _minor;
     _basic = prefs.getBool('basic') ?? _basic;
-    _cardLeft = prefs.getInt('cardLeft') ?? _cardLeft;
-    _cardRight = prefs.getInt('cardRight') ?? _cardRight;
+    // A card saved by a build with more of them: the last there is.
+    _cardLeft = (prefs.getInt('cardLeft') ?? _cardLeft).clamp(0, kBasicCards.length - 1);
+    _cardRight = (prefs.getInt('cardRight') ?? _cardRight).clamp(0, kBasicCards.length - 1);
     _sparse = prefs.getBool('sparsePolling') ?? _sparse;
-    _obd
-      ..sparse = _sparse
-      ..thirdRow = _carSeven(prefs.getString('car'))
-      ..rwd = prefs.getString('car') == 'modelY5rwd';
+    _obd.sparse = _sparse;
+    _applyCar(prefs.getString('car') ?? 'modelY7'); // the owner's, by default
     // Inside the slider's range, whatever was stored.
     _lookMs = (prefs.getInt('wifiLookMs') ?? _lookMs).clamp(1000, 10000).toInt();
     _applyLook();
@@ -180,7 +180,9 @@ class _DashPageState extends State<DashPage> {
     }
     _tyres = [_obd.tpFL, _obd.tpFR, _obd.tpRL, _obd.tpRR];
     if (mounted) setState(() {});
-    final firstRun = prefs.getString('car') == null;
+    // The first launch's pages until all are through: closed midway (the
+    // phone may close the dash while the S3XY app is open), they come again.
+    final firstRun = prefs.getString('car') == null || prefs.getBool('setupDone') == false;
     _obd.addListener(_linksChanged);
     _obd.addListener(_saveTyres);
     _bt.addListener(_linksChanged);
@@ -188,8 +190,14 @@ class _DashPageState extends State<DashPage> {
     _life = AppLifecycleListener(onResume: () {
       _obd.kick();
       _bt.kick();
-      // Back from allowing installs: the update carries on.
-      if (_installOnReturn) canInstallUpdates().then((ok) => ok ? _installUpdate() : null);
+      // Back from allowing installs: the update carries on, once (the
+      // settings keep the button).
+      final install = _installOnReturn;
+      _installOnReturn = false;
+      if (install) canInstallUpdates().then((ok) => ok ? _installUpdate() : null);
+      // Back from Android's installer, its confirmation answered or left
+      // behind (Home): a tap may start over.
+      if (_handedOver) _installing = _handedOver = false;
     });
     // Bluetooth first, then the WiFi stream, took the Commander down; the
     // other way round held. So each new stream waits for Bluetooth to step
@@ -203,10 +211,12 @@ class _DashPageState extends State<DashPage> {
     // starts, so the phone's permission prompts come after the page that
     // says what they are for.
     if (firstRun && mounted) {
+      prefs.setBool('setupDone', false);
       await _askCar();
       await _askLayout();
       await _setupHelp();
       if (!mounted) return;
+      prefs.setBool('setupDone', true);
     }
     _connect();
     _linksStarted = true;
@@ -293,82 +303,87 @@ class _DashPageState extends State<DashPage> {
   /// The cars offered: a 7-seat Model Y comes with two motors only; a
   /// 5-seat one with one (RWD) or two.
   static const _cars = {'modelY5rwd': '5 seats RWD', 'modelY5': '5 seats AWD', 'modelY7': '7 seats'};
-  static bool _carSeven(String? car) => car == null || car == 'modelY7'; // the owner's, by default
+
+  /// The car as picked: a 5-seater's third row leaves the seat map, a
+  /// rear-motor car's front leaves the ring; and back.
+  void _applyCar(String car) => _obd
+    ..thirdRow = car == 'modelY7'
+    ..rwd = car == 'modelY5rwd';
+  String get _car => _obd.thirdRow ? 'modelY7' : _obd.rwd ? 'modelY5rwd' : 'modelY5';
 
   /// Which car: a picture of each layout to tap, then for a 5-seater its
-  /// drive. Asked on the first launch; the settings change it after.
-  /// Dismissed (back), it asks again next time.
+  /// drive. Asked on the first launch; the settings change it after. Back
+  /// asks again (from the drive, the car): the dash needs the car.
   Future<void> _askCar() async {
-    final seven = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        scrollable: true,
-        title: const Text('Which car do you have?'),
-        content: Row(mainAxisSize: MainAxisSize.min, children: [
-          for (final s in [false, true])
-            InkWell(
-              onTap: () => Navigator.pop(ctx, s),
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Column(children: [
-                  CarSeats(thirdRow: s, height: 150),
-                  const SizedBox(height: 8),
-                  Text('Model Y\n${s ? 7 : 5} seats', textAlign: TextAlign.center),
-                ]),
+    while (true) {
+      if (!mounted) return;
+      final seven = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          scrollable: true,
+          title: const Text('Which car do you have?'),
+          content: Row(mainAxisSize: MainAxisSize.min, children: [
+            for (final s in [false, true])
+              InkWell(
+                onTap: () => Navigator.pop(ctx, s),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Column(children: [
+                    CarSeats(thirdRow: s, height: 150),
+                    const SizedBox(height: 8),
+                    Text('Model Y\n${s ? 7 : 5} seats', textAlign: TextAlign.center),
+                  ]),
+                ),
               ),
-            ),
-        ]),
-      ),
-    );
-    if (seven == null || !mounted) return;
-    if (seven) return _setCar('modelY7');
-    final rwd = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Which drive?'),
-        children: [
-          for (final (r, label, about) in const [
-            (true, 'Rear-wheel drive', 'one motor'),
-            (false, 'All-wheel drive', 'two motors'),
-          ])
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, r),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              child: Text('$label ($about)', style: const TextStyle(fontSize: 18)),
-            ),
-        ],
-      ),
-    );
-    if (rwd != null) await _setCar(rwd ? 'modelY5rwd' : 'modelY5');
+          ]),
+        ),
+      );
+      if (!mounted) return;
+      if (seven == true) return _setCar('modelY7');
+      if (seven == false) {
+        final rwd = await _choose('Which drive?', const [
+          (true, 'Rear-wheel drive', 'one motor'),
+          (false, 'All-wheel drive', 'two motors'),
+        ]);
+        if (rwd != null && mounted) return _setCar(rwd ? 'modelY5rwd' : 'modelY5');
+      }
+    }
   }
+
+  /// A first-launch question: each option its label and what it means.
+  Future<T?> _choose<T>(String title, List<(T, String, String)> options) => showDialog<T>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => SimpleDialog(
+          title: Text(title),
+          children: [
+            for (final (value, label, about) in options)
+              SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, value),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                child: Text('$label ($about)', style: const TextStyle(fontSize: 18)),
+              ),
+          ],
+        ),
+      );
 
   /// Which layout, on the first launch (the settings switch it later):
   /// everything at once, or basic's bigger cards.
   Future<void> _askLayout() async {
-    final basic = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Which layout?'),
-        children: [
-          for (final (b, label, about) in const [
-            (false, 'Full', 'everything at once'),
-            (true, 'Basic', 'bigger text, one card a side; swipe a card for the next'),
-          ])
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, b),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-              child: Text('$label ($about)', style: const TextStyle(fontSize: 18)),
-            ),
-        ],
-      ),
-    );
-    if (basic == null || !mounted) return;
-    setState(() => _basic = basic);
-    (await SharedPreferences.getInstance()).setBool('basic', basic);
+    final basic = await _choose('Which layout?', const [
+      (false, 'Full', 'everything at once'),
+      (true, 'Basic', 'bigger text, one card a side; swipe a card for the next'),
+    ]);
+    if (basic != null && mounted) await _setBasic(basic);
+  }
+
+  /// The basic layout on or off, kept: the first launch's question, the
+  /// settings' switch and the gear's tap.
+  Future<void> _setBasic(bool on) async {
+    setState(() => _basic = on);
+    (await SharedPreferences.getInstance()).setBool('basic', on);
   }
 
   /// How to turn on the Commander's WiFi stream (ScanMyTesla) in the S3XY
@@ -451,22 +466,28 @@ class _DashPageState extends State<DashPage> {
       password.dispose();
     });
     if (ok != true) return;
-    _ssid = name.isEmpty ? kDefaultSsid : name;
-    _password = pass;
+    await _saveWifi(name, pass);
+    if (_linksStarted) _connect(now: true);
+  }
+
+  /// Keeps the WiFi login (an empty name is the standard one).
+  Future<void> _saveWifi(String name, String password) async {
+    _ssid = name.trim().isEmpty ? kDefaultSsid : name.trim();
+    _password = password;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('ssid', _ssid);
     await prefs.setString('password', _password);
-    if (_linksStarted) _connect(now: true);
   }
 
   /// A newer release on GitHub, once looked for at start (Android only).
   Update? _update;
-  bool _updateOffered = false;
 
   Future<void> _checkUpdate() async {
     if (defaultTargetPlatform != TargetPlatform.android) return;
-    _obd.onUpdateFailed =
-        (why) => _say(why.contains('ABORTED') ? 'Update cancelled' : 'Update not installed: $why');
+    _obd.onUpdateFailed = (why) {
+      _installing = false;
+      _say(why.contains('ABORTED') || why == 'cancelled' ? 'Update cancelled' : 'Update not installed: $why');
+    };
     await loadBuild();
     final u = await checkUpdate(diagBuild);
     if (u == null || !mounted) return;
@@ -479,15 +500,10 @@ class _DashPageState extends State<DashPage> {
   /// no stream, else at the next stop in P. The settings keep the button.
   void _offerUpdate() {
     final u = _update;
-    if (u == null || _updateOffered || !mounted || (_obd.live && !_obd.parked)) return;
-    _updateOffered = true;
+    if (u == null || !mounted || _installing || (_obd.live && !_obd.parked)) return;
     _obd.removeListener(_offerUpdate);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(
-          duration: const Duration(seconds: 12),
-          content: Text('Wattline ${u.version} is available'),
-          action: SnackBarAction(label: 'UPDATE', onPressed: _installUpdate)));
+    _say('Wattline ${u.version} is available',
+        duration: const Duration(seconds: 12), action: SnackBarAction(label: 'UPDATE', onPressed: _installUpdate));
   }
 
   /// Allowed to install apps first: going to Settings mid-install cancels
@@ -495,7 +511,11 @@ class _DashPageState extends State<DashPage> {
   /// the update carries on when the app is back in front ([_life]).
   Future<void> _installUpdate() async {
     final u = _update;
-    if (u == null) return;
+    if (u == null || _installing) return; // one download at a time
+    if (_obd.live && !_obd.parked) {
+      _say('Shift to P to update'); // Android's installer closes the dash
+      return;
+    }
     _installOnReturn = false;
     if (!await canInstallUpdates()) {
       _installOnReturn = true;
@@ -503,18 +523,30 @@ class _DashPageState extends State<DashPage> {
       await allowInstallUpdates();
       return;
     }
+    // Busy until Android's installer is done: it replaces the app, or says
+    // why not ([Panda.onUpdateFailed]); a download that fails says so here.
+    _installing = true;
+    _handedOver = false;
+    _obd.removeListener(_offerUpdate); // started from the settings: no offer at the next stop
     _say('Downloading Wattline ${u.version}…');
     final err = await installUpdate(u);
-    if (err != null) _say('Update not installed: $err');
+    if (err != null) {
+      _installing = false;
+      _say('Update not installed: $err');
+    } else {
+      _handedOver = true;
+    }
   }
 
-  bool _installOnReturn = false;
+  bool _installOnReturn = false, _installing = false, _handedOver = false;
 
-  void _say(String text) {
+  /// A message in the snackbar, in place of the last; behind the approval
+  /// prompt while that is up, as the car is waiting on it.
+  void _say(String text, {Duration duration = const Duration(seconds: 4), SnackBarAction? action}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text)));
+    final bar = ScaffoldMessenger.of(context);
+    if (_approval == null) bar.hideCurrentSnackBar();
+    bar.showSnackBar(SnackBar(content: Text(text), duration: duration, action: action));
   }
 
   /// Both setup pages: the WiFi stream's, then the Bluetooth link's.
@@ -557,11 +589,7 @@ class _DashPageState extends State<DashPage> {
   }
 
   Future<void> _setCar(String car) async {
-    if (mounted) {
-      setState(() => _obd
-        ..thirdRow = _carSeven(car)
-        ..rwd = car == 'modelY5rwd');
-    }
+    if (mounted) setState(() => _applyCar(car));
     (await SharedPreferences.getInstance()).setString('car', car);
   }
 
@@ -637,11 +665,7 @@ class _DashPageState extends State<DashPage> {
           'stays landscape, then tap the map again',
       _ => 'Google Maps is not installed',
     };
-    if (say != null && mounted) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(say), duration: const Duration(seconds: 10)));
-    }
+    if (say != null) _say(say, duration: const Duration(seconds: 10));
   }
 
   /// The Bluetooth icon: try the link now, and the settings, which say what
@@ -677,10 +701,8 @@ class _DashPageState extends State<DashPage> {
     }
     // While approving, the approval prompt already says what is needed, if
     // it is still up.
-    if (err == null || !mounted || (_bt.approving && _approval != null)) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(err)));
+    if (err == null || (_bt.approving && _approval != null)) return;
+    _say(err);
   }
 
   Future<void> _settings() async {
@@ -705,6 +727,20 @@ class _DashPageState extends State<DashPage> {
               onChangeEnd: (v) async =>
                   (await SharedPreferences.getInstance()).setInt(key, (v * 1000).round()),
             ),
+          ),
+        ]);
+    // A switch row: [set] applies it at once, kept under [key] (or by [set]).
+    Widget toggle(String label, bool value, void Function(bool) set, StateSetter redraw, {String? key}) =>
+        Row(children: [
+          Expanded(child: Text(label)),
+          Switch(
+            value: value,
+            onChanged: (v) async {
+              set(v); // may be async (the layout's own save): outside setState
+              redraw(() {});
+              setState(() {});
+              if (key != null) (await SharedPreferences.getInstance()).setBool(key, v);
+            },
           ),
         ]);
     final action = await showDialog<String>(
@@ -743,20 +779,35 @@ class _DashPageState extends State<DashPage> {
           // And what the Bluetooth icon stands for.
           Align(
             alignment: Alignment.centerLeft,
-            child: Text(
-                _bt.ready
-                    ? 'Commander Bluetooth: connected. Car data: ${_bt.pushInfo}, ${_bt.pushCount} pushes. ${_bt.carLink}.'
-                    : 'Commander Bluetooth: ${_bt.status}',
-                style: const TextStyle(color: Colors.white70)),
+            child: ListenableBuilder(
+              listenable: _bt,
+              builder: (context, _) => Text(
+                  _bt.ready
+                      ? 'Commander Bluetooth: connected. Car data: ${_bt.pushInfo}, ${_bt.pushCount} pushes. ${_bt.carLink}.'
+                      : 'Commander Bluetooth: ${_bt.status}',
+                  style: const TextStyle(color: Colors.white70)),
+            ),
           ),
           Align(
             alignment: Alignment.centerLeft,
             child: Row(children: [
-              TextButton(onPressed: _setupHelp, child: const Text('Setup steps')),
+              // A WiFi login changed there is the one to keep: the fields
+              // here take it, or saving would put the old one back. Not
+              // changed, what is typed here stays.
+              TextButton(
+                  onPressed: () async {
+                    final was = (_ssid, _password);
+                    await _setupHelp();
+                    if ((_ssid, _password) != was) {
+                      ssid.text = _ssid;
+                      password.text = _password;
+                    }
+                  },
+                  child: const Text('Setup steps')),
               if (_update case final u?)
                 TextButton(
                   onPressed: () {
-                    Navigator.pop(context);
+                    Navigator.pop(ctx);
                     _installUpdate();
                   },
                   child: Text('Update to ${u.version}'),
@@ -808,18 +859,11 @@ class _DashPageState extends State<DashPage> {
           // stream (ScanMyTesla off) there is then no Bluetooth either. It also
           // takes the time limit off WiFi's look for the network.
           const SizedBox(height: 8),
-          Row(children: [
-            const Expanded(child: Text('Bluetooth waits for the WiFi stream, no time limit')),
-            Switch(
-              value: _wifiFirst,
-              onChanged: (v) async {
-                redraw(() => _wifiFirst = v);
-                _applyLook();
-                _obd.relook(); // a look in progress takes the new limit now
-                (await SharedPreferences.getInstance()).setBool('btWifiFirst', v);
-              },
-            ),
-          ]),
+          toggle('Bluetooth waits for the WiFi stream, no time limit', _wifiFirst, (v) {
+            _wifiFirst = v;
+            _applyLook();
+            _obd.relook(); // a look in progress takes the new limit now
+          }, redraw, key: 'btWifiFirst'),
           // Bluetooth stays off the Commander while its WiFi stream starts:
           // the dash has no buttons for that spell, shorter if these hold.
           gap('Bluetooth off before WiFi starts', _settleMs, 5, 'btSettleMs',
@@ -839,55 +883,14 @@ class _DashPageState extends State<DashPage> {
           // rate: a third of the app's CPU in a replayed drive. Off, small
           // changes land at once and only jumps glide.
           const SizedBox(height: 8),
-          Row(children: [
-            const Expanded(child: Text('Basic layout (bigger text, swipe the side cards)')),
-            Switch(
-              value: _basic,
-              onChanged: (v) async {
-                redraw(() => _basic = v);
-                setState(() {});
-                (await SharedPreferences.getInstance()).setBool('basic', v);
-              },
-            ),
-          ]),
-          Row(children: [
-            const Expanded(child: Text('Smooth power ring (more battery)')),
-            Switch(
-              value: _smooth,
-              onChanged: (v) async {
-                redraw(() => _smooth = v);
-                setState(() {});
-                (await SharedPreferences.getInstance()).setBool('smoothRing', v);
-              },
-            ),
-          ]),
+          toggle('Basic layout (bigger text, swipe the side cards)', _basic, _setBasic, redraw),
+          toggle('Smooth power ring (more battery)', _smooth, (v) => _smooth = v, redraw, key: 'smoothRing'),
           // The figures few glance at: off, the rows go, the rest closes up.
-          Row(children: [
-            const Expanded(child: Text('Show 12 V, other power and cell imbalance')),
-            Switch(
-              value: _minor,
-              onChanged: (v) async {
-                redraw(() => _minor = v);
-                setState(() {});
-                (await SharedPreferences.getInstance()).setBool('minorFigures', v);
-              },
-            ),
-          ]),
+          toggle('Show 12 V, other power and cell imbalance', _minor, (v) => _minor = v, redraw, key: 'minorFigures'),
           // Off, every id streams: doors and belts live, but more frames for
           // the Commander to drop, speed's among them.
-          Row(children: [
-            const Expanded(child: Text('Sparse polling (steadier speed, slower doors and belts)')),
-            Switch(
-              value: _sparse,
-              onChanged: (v) async {
-                redraw(() => _sparse = v);
-                _obd.sparse = v;
-                (await SharedPreferences.getInstance()).setBool('sparsePolling', v);
-              },
-            ),
-          ]),
-          // The car picked on the first launch: a 5-seater's third row
-          // leaves the seat map, a rear-motor car's front leaves the ring.
+          toggle('Sparse polling (steadier speed, slower doors and belts)', _sparse, (v) => _obd.sparse = _sparse = v,
+              redraw, key: 'sparsePolling'),
           const SizedBox(height: 8),
           Row(children: [
             const Expanded(child: Text('Car: Model Y')),
@@ -895,9 +898,9 @@ class _DashPageState extends State<DashPage> {
               segments: [
                 for (final MapEntry(:key, :value) in _cars.entries) ButtonSegment(value: key, label: Text(value)),
               ],
-              selected: {_obd.thirdRow ? 'modelY7' : _obd.rwd ? 'modelY5rwd' : 'modelY5'},
+              selected: {_car},
               onSelectionChanged: (v) {
-                _setCar(v.first); // sets it at once; the save follows
+                _setCar(v.first);
                 redraw(() {});
               },
             ),
@@ -944,28 +947,18 @@ class _DashPageState extends State<DashPage> {
     final prefs = await SharedPreferences.getInstance();
     _host = host.text.trim();
     _port = int.tryParse(port.text.trim()) ?? kDefaultPort;
-    _ssid = ssid.text.trim();
-    _password = password.text;
     await prefs.setString('host', _host);
     await prefs.setInt('port', _port);
-    await prefs.setString('ssid', _ssid);
-    await prefs.setString('password', _password);
+    await _saveWifi(ssid.text, password.text);
     if (mounted) setState(() {});
     _connect(now: true); // asked for: try the network even if not seen yet
-  }
-
-  /// The speed and power ring, the same in both layouts.
-  /// Full to basic or back (the gear's tap), kept as the settings' switch is.
-  Future<void> _toggleBasic() async {
-    setState(() => _basic = !_basic);
-    (await SharedPreferences.getInstance()).setBool('basic', _basic);
   }
 
   /// The full layout's figures under the battery: what the pack feeds besides
   /// the motors (WiFi) and its health; the air outside is by the ring.
   Widget _figures(Panda o) => Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
         if (o.wifiLive && o.otherKw != null) _Draws(obd: o, minor: _minor),
-        _Pack(obd: o, outside: false, minor: _minor),
+        _Pack(obd: o, minor: _minor),
       ]);
 
   /// The bar along the foot: the links, the route ([nav]: basic has it on a
@@ -981,29 +974,13 @@ class _DashPageState extends State<DashPage> {
   Widget _ring(Panda o, {bool outside = false}) => AspectRatio(
         aspectRatio: 1,
         child: LayoutBuilder(builder: (context, box) {
-          const size = 30.0;
-          // As RingGauge draws it: radius r, the motors' arcs 8.5 % of r wide.
-          final half = box.maxWidth / 2, r = half - 6, d = r * 1.0425 + size / 2 + 5;
+          const size = _ApIcon.size;
+          // Up and right, 5 clear of the arcs.
+          final half = box.maxWidth / 2, d = RingGauge.outerRadius(box.maxWidth) + size / 2 + 5;
           const a = -38 * pi / 180;
-          final icon = _autopilot(o, size: size);
+          final icon = _autopilot(o);
           return Stack(clipBehavior: Clip.none, children: [
-            Positioned.fill(
-              child: ListenableBuilder(
-                listenable: o.fast,
-                builder: (context, _) => RingGauge(
-                  glideAll: _smooth,
-                  frontKw: o.live ? o.frontKw : null,
-                  rearKw: o.live ? o.rearKw : null,
-                  rearOnly: o.rwd,
-                  pedalPct: o.live ? o.pedalPct : null,
-                  brakePct: o.live ? o.brakePct : null,
-                  regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
-                  // Digital speed sits in the ring, the gear under it; a tap
-                  // on the gear swaps the layouts.
-                  child: _Centre(obd: o, gear: true, onGear: _toggleBasic),
-                ),
-              ),
-            ),
+            Positioned.fill(child: _powerRing(o, smooth: _smooth, onGear: () => _setBasic(!_basic))),
             if (icon != null)
               Positioned(
                 left: half + d * cos(a) - size / 2,
@@ -1021,69 +998,59 @@ class _DashPageState extends State<DashPage> {
         }),
       );
 
-  bool _compactNow = false;
+  /// Only what is on screen, in the basic layout beside nothing else; worked
+  /// out again only when that changes.
+  void _fitSubscription() {
+    final now = (_basic && MediaQuery.sizeOf(context).width >= 700, _cardLeft, _cardRight);
+    if (now == _fitted) return;
+    _fitted = now;
+    _obd.skip = now.$1 ? basicSkip(_cardLeft, _cardRight) : const {};
+  }
 
-  /// Only what is on screen, in the basic layout beside nothing else.
-  void _fitSubscription() =>
-      _obd.skip = _basic && !_compactNow ? basicSkip(_cardLeft, _cardRight) : const {};
+  (bool, int, int)? _fitted;
 
-  /// The basic layout: the ring between two stacks of cards, one card of
-  /// each showing, swiped up or down for the next. Each card answers one
-  /// question, its graphic taking the room its text leaves: energy (the
-  /// battery, what the pack feeds besides the motors or the charge, the
-  /// pack's health), the drive (lamps and grip, g-meter, the air outside),
-  /// the car as large as it fits (lowered for its beams ahead), the buttons,
-  /// the route. Both stacks hold every card, so either side shows any; each
-  /// side's card is kept. The assist state is at the ring's top right.
+  /// The basic layout: the ring between two stacks of cards (energy, drive,
+  /// the car, the buttons, the route), one of each showing, swiped up or down
+  /// for the next; either side shows any card and keeps its own.
   Widget _basicRow(Panda o) {
-    // The figures' rows (label and value) and the route a little over the
-    // full layout's size on screen ([kBasicFigures]), not scaled up with the
-    // rest: next to the ring they read as notes.
-    const small = kBasicFigures / _CardsState._scale;
-    List<Widget> cards() => [
-          // The dial and its rows together in the card's middle.
-          Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            // The dial as big on screen as in the full layout: next to the
-            // ring, not bigger than it (smaller only if the card is short).
-            Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: _Battery(obd: o, width: 128 / _CardsState._scale))),
-            const SizedBox(height: 12),
-            // The draws and the pack's health in one column, the values lined
-            // up; all of them here, whatever the full layout's switch says.
-            Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (o.wifiLive && o.charging) _Charge(obd: o, size: small) else _Draws(obd: o, size: small),
-              _Pack(obd: o, outside: false, size: small),
-            ]),
-          ]),
-          // In the height it had before the cards ran the screen's height (the
-          // bar under them took the rest), centred: the g-meter no bigger
-          // than it was, room above and below.
-          FractionallySizedBox(
-            heightFactor: 0.805,
-            child: Column(children: [
-              // The lamps and grip on top (the assist state is by the ring), at
-              // the figures' size.
-              _Lights(obd: o, size: small),
-              const SizedBox(height: 6),
-              // The g-meter (WiFi only), as big as the room.
-              Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
-              const SizedBox(height: 6),
-              // The air outside.
-              _Pack(obd: o, pack: false, size: small),
-            ]),
-          ),
-          // The car, low going forward and high in reverse ([_BasicCar]).
-          _Fill((height) => _BasicCar(obd: o, height: height)),
+    final cards = [
+      // The dial and its rows together in the card's middle; the dial as
+      // big on screen as the full layout's, not bigger than the ring.
+      _Card(Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: _Battery(obd: o, width: 128 / kBasicFigures))),
+        const SizedBox(height: 12),
+        // All the draws and the pack's health, whatever the full
+        // layout's switch says.
+        Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
+          _Pack(obd: o),
+        ]),
+      ])),
+      // Centred, with room above and below: the g-meter about 161 dp across.
+      _Card(FractionallySizedBox(
+        heightFactor: 0.79,
+        child: Column(children: [
+          _Lights(obd: o),
+          const SizedBox(height: 6),
+          Expanded(child: _GBall(obd: o, tall: true)),
+          const SizedBox(height: 6),
+          _statRow(context, 'OUTSIDE', o.outsideC == null ? '—' : _deg(o.outsideC!), color: _airColor(o.outsideC)),
+        ]),
+      )),
+      _Card.fill((height) => _BasicCar(obd: o, height: height)),
+      _Card(
           _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),
           ])),
-          // The route at the figures' size too; centred in its card, which
-          // bounds its width so a long name wraps rather than shrinks it.
-          Center(child: _Nav(obd: o, bt: _bt, tall: true, size: small)),
-        ];
+          scale: kBasicButtons),
+      // Centred in its card, which bounds its width so a long name wraps
+      // rather than shrinks it.
+      _Card(Center(child: _Nav(obd: o, bt: _bt, tall: true))),
+    ];
     Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
     return Row(children: [
-      Expanded(child: _Cards(key: const ValueKey('left'), cards: cards(), initial: _cardLeft, dotsLeft: true,
+      Expanded(child: _Cards(key: const ValueKey('left'), cards: cards, initial: _cardLeft, dotsLeft: true,
           onPage: (p) {
             keep('cardLeft', _cardLeft = p);
             _fitSubscription();
@@ -1097,7 +1064,7 @@ class _DashPageState extends State<DashPage> {
           Padding(padding: const EdgeInsets.only(top: 6), child: _controls(nav: false)),
         ]),
       ),
-      Expanded(child: _Cards(key: const ValueKey('right'), cards: cards(), initial: _cardRight,
+      Expanded(child: _Cards(key: const ValueKey('right'), cards: cards, initial: _cardRight,
           onPage: (p) {
             keep('cardRight', _cardRight = p);
             _fitSubscription();
@@ -1117,8 +1084,6 @@ class _DashPageState extends State<DashPage> {
         listenable: Listenable.merge([_obd, _bt]),
         builder: (context, _) {
           final o = _obd;
-          // Beside Google Maps the compact dash shows its own few things.
-          _compactNow = MediaQuery.sizeOf(context).width < 700;
           _fitSubscription();
           // Nothing moving on screen outlives the stream: a stalled link
           // blanks speed, power and pedal and drops the glows.
@@ -1127,7 +1092,8 @@ class _DashPageState extends State<DashPage> {
             // Edge glows sit under the dash so they never cover the buttons:
             // indicators blink green in step with the car's flasher, blind
             // spot holds a steady red, brake red at the foot.
-            ListenableBuilder(
+            RepaintBoundary(
+              child: ListenableBuilder(
               listenable: o.fast,
               builder: (context, _) => Stack(fit: StackFit.expand, children: [
                 if (o.live && o.braking) const _Edge(side: _Side.bottom, color: Color(0xFFE23D3D)),
@@ -1136,7 +1102,7 @@ class _DashPageState extends State<DashPage> {
                 if (o.live && (o.blindR || (o.indR && o.blinkLit)))
                   _Edge(side: _Side.right, color: o.blindR ? const Color(0xFFE23D3D) : kRegen),
               ]),
-            ),
+            )),
             // Beside Google Maps, or in any split, the window is about half
             // as wide: the essentials only, laid out for it.
             if (MediaQuery.sizeOf(context).width < 700)
@@ -1151,7 +1117,7 @@ class _DashPageState extends State<DashPage> {
                 // Not on a rear-motor car: its ring has the pedal.
                 if (live && !o.rwd)
                   IgnorePointer(
-                    child: ListenableBuilder(
+                    child: RepaintBoundary(child: ListenableBuilder(
                       listenable: o.fast,
                       builder: (context, _) => Align(
                         alignment: Alignment.topCenter,
@@ -1161,7 +1127,7 @@ class _DashPageState extends State<DashPage> {
                           child: Container(height: 4, color: kAccent),
                         ),
                       ),
-                    ),
+                    )),
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
@@ -1169,8 +1135,6 @@ class _DashPageState extends State<DashPage> {
                     Expanded(
                       child: Row(children: [
                         _Actions(obd: o, bt: _bt, onTap: _press),
-                        // The lamps, and under them the car as large as the
-                        // room left (its figures with it).
                         Expanded(
                           child: Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
@@ -1191,16 +1155,16 @@ class _DashPageState extends State<DashPage> {
                         // the charge and the figures together in the middle.
                         Expanded(
                           child: o.wifiLive && o.charging
-                              ? _SideColumn(children: [_Battery(obd: o, width: 128), _Charge(obd: o), _figures(o)])
+                              ? _SideColumn(children: [_Battery(obd: o), _Charge(obd: o), _figures(o)])
                               : Column(children: [
-                                  Padding(padding: const EdgeInsets.fromLTRB(8, 14, 8, 0), child: _Battery(obd: o, width: 128)),
+                                  Padding(padding: const EdgeInsets.fromLTRB(8, 14, 8, 0), child: _Battery(obd: o)),
                                   Expanded(child: _SideColumn(children: [_figures(o)])),
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-                                    child: Visibility.maintain(
-                                      visible: o.wifiLive && o.gear != 'P' && (o.gLong != null || o.gLat != null),
-                                      child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o)),
-                                    ),
+                                    child: Builder(builder: (context) {
+                                      final shown = o.wifiLive && o.gear != 'P' && (o.gLong != null || o.gLat != null);
+                                      return Visibility.maintain(visible: shown, child: _GBall(obd: o, listen: shown));
+                                    }),
                                   ),
                                 ]),
                         ),
@@ -1222,31 +1186,47 @@ class _DashPageState extends State<DashPage> {
 /// The driver-assist state as the car shows it, its Autopilot wheel on a
 /// disc: grey while Autosteer is ready (or has just ended), blue while it
 /// steers (Autopilot, Navigate on Autopilot, FSD); the cruise gauge on blue
-/// while TACC alone holds the speed. The hands-on nag flashes it amber; red
-/// flashing while it slows the car or says to take over, red and struck
+/// while TACC alone holds the speed. The hands-on nag flashes it amber, red
+/// once it chimes; red flashing while it slows the car or says to take over, red and struck
 /// through once it locks Autopilot out (grey and struck through on a fault).
 /// Its words on a long press.
-Widget? _autopilot(Panda o, {double size = 30}) {
+_ApIcon? _autopilot(Panda o) {
   const blue = Color(0xFF0048FF), grey = Color(0xFF5E5E5E); // the car's own blue
-  final nag = o.live ? o.handsOn : null;
-  final ap = o.autopilot;
-  final state = switch (nag) {
-    3 || 4 || 5 || 9 || 10 => (kWarn, Glyph.autopilot, true, false, 'HOLD WHEEL'),
-    6 => (kAlert, Glyph.autopilot, true, false, 'SLOWING'),
-    7 => (kAlert, Glyph.autopilot, false, true, 'AP LOCKED'),
-    _ => switch (ap) {
+  return switch (o.live ? o.handsOn : null) {
+    3 => const _ApIcon(disc: kWarn, flash: true, words: 'HOLD WHEEL'),
+    4 || 5 || 9 || 10 => const _ApIcon(disc: kAlert, flash: true, words: 'HOLD WHEEL'), // chiming: about to act
+    6 => const _ApIcon(disc: kAlert, flash: true, words: 'SLOWING'),
+    7 => const _ApIcon(disc: kAlert, struck: true, words: 'AP LOCKED'),
+    // On WiFi, TACC is the assist ready with cruise holding a speed.
+    _ => switch (o.autopilot == 'AP READY' && o.cruiseSet != null ? 'TACC' : o.autopilot) {
         null => null,
-        'TACC' => (blue, Glyph.cruise, false, false, ap),
-        'AUTOPILOT' || 'NAV ON AP' || 'FSD' => (blue, Glyph.autopilot, false, false, ap),
-        'AP ENDING' => (kAlert, Glyph.autopilot, true, false, 'TAKE OVER'),
-        'AP FAULT' => (grey, Glyph.autopilot, false, true, ap),
-        _ => (grey, Glyph.autopilot, false, false, ap), // ready, or just ended
+        'TACC' => const _ApIcon(disc: blue, glyph: Glyph.cruise, words: 'TACC'),
+        'AUTOPILOT' || 'NAV ON AP' || 'FSD' => _ApIcon(disc: blue, words: o.autopilot!),
+        'AP ENDING' => const _ApIcon(disc: kAlert, flash: true, words: 'TAKE OVER'),
+        'AP FAULT' => const _ApIcon(disc: grey, struck: true, words: 'AP FAULT'),
+        final ap => _ApIcon(disc: grey, words: ap), // ready, or just ended
       },
   };
-  if (state == null) return null;
-  final (disc, glyph, flash, struck, words) = state;
-  return _ApIcon(disc: disc, glyph: glyph, flash: flash, struck: struck, words: words, size: size);
 }
+
+/// The speed and power ring, the speed in its hole ([_Centre], [onGear] its
+/// gear's tap), redrawn on the fast tick on its own layer (the rest of the
+/// page stays as it is).
+Widget _powerRing(Panda o, {required bool smooth, VoidCallback? onGear}) => RepaintBoundary(
+      child: ListenableBuilder(
+        listenable: o.fast,
+        builder: (context, _) => RingGauge(
+          glideAll: smooth,
+          frontKw: o.live ? o.frontKw : null,
+          rearKw: o.live ? o.rearKw : null,
+          rearOnly: o.rwd,
+          pedalPct: o.live ? o.pedalPct : null,
+          brakePct: o.live ? o.brakePct : null,
+          regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
+          child: _Centre(obd: o, onGear: onGear),
+        ),
+      ),
+    );
 
 /// The dash in half a screen, beside Google Maps or any other split: speed
 /// and power in the ring, the gear and the battery above, the assist state
@@ -1268,7 +1248,6 @@ class _Compact extends StatelessWidget {
         SizedBox(
           height: 38,
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            // Just the gear it is in.
             Text(o.gear,
                 style: TextStyle(
                     fontSize: 28,
@@ -1292,7 +1271,7 @@ class _Compact extends StatelessWidget {
                     Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 6),
                         child: Text(_deg(c),
-                            style: TextStyle(fontSize: 18, color: c <= 3 ? kCold : Colors.white70))),
+                            style: TextStyle(fontSize: 18, color: _airColor(c, Colors.white70)))),
                   if (o.wifiLive)
                     Opacity(
                       opacity: o.gripLit ? 1 : 0,
@@ -1311,19 +1290,7 @@ class _Compact extends StatelessWidget {
           child: Center(
             child: AspectRatio(
               aspectRatio: 1,
-              child: ListenableBuilder(
-                listenable: o.fast,
-                builder: (context, _) => RingGauge(
-                  glideAll: smooth,
-                  frontKw: o.live ? o.frontKw : null,
-                  rearKw: o.live ? o.rearKw : null,
-                  rearOnly: o.rwd,
-                  pedalPct: o.live ? o.pedalPct : null,
-                  brakePct: o.live ? o.brakePct : null,
-                  regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
-                  child: _Centre(obd: o),
-                ),
-              ),
+              child: _powerRing(o, smooth: smooth),
             ),
           ),
         ),

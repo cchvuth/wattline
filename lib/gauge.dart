@@ -54,6 +54,13 @@ class RingGauge extends StatefulWidget {
   final double? pedalPct, brakePct;
   final Widget child;
 
+  /// The arcs' radius in a ring [side] across, and their width over it.
+  static double radiusIn(double side) => side / 2 - 6;
+  static const arcWidth = 0.085;
+
+  /// How far out the arcs reach, in a ring [side] across.
+  static double outerRadius(double side) => radiusIn(side) * (1 + arcWidth / 2);
+
   /// What the right arc shows: the front motor, or a rear-motor car's
   /// pedals, the brake as a negative.
   double? get _right => !rearOnly
@@ -76,14 +83,14 @@ class RingGauge extends StatefulWidget {
 
 class _RingGaugeState extends State<RingGauge> {
   static const _glide = Duration(milliseconds: 140);
-  static const _jumpKw = 2.0;
+  static const _jumpKw = 2.0, _jumpPct = 5.0; // power, kW; pedal and brake, %
   DateTime _glideUntil = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void didUpdateWidget(RingGauge old) {
     super.didUpdateWidget(old);
-    final jump = ((widget._right ?? 0) - (old._right ?? 0)).abs() >= _jumpKw ||
-        ((widget._foot ?? 0) - (old._foot ?? 0)).abs() >= _jumpKw ||
+    final jump = ((widget._right ?? 0) - (old._right ?? 0)).abs() >= (widget.rearOnly ? _jumpPct : _jumpKw) ||
+        ((widget._foot ?? 0) - (old._foot ?? 0)).abs() >= _jumpPct ||
         ((widget.rearKw ?? 0) - (old.rearKw ?? 0)).abs() >= _jumpKw;
     // A jump glides, and so does whatever comes while it does: landing at
     // once mid-glide would be the very jump it smooths.
@@ -118,7 +125,7 @@ class _RingGaugeState extends State<RingGauge> {
 }
 
 class _Vals {
-  const _Vals(this.front, this.rear, [this.brake = 0]);
+  const _Vals(this.front, this.rear, this.brake);
   final double front, rear, brake;
 
   // By value: unchanged power starts no animation and paints nothing.
@@ -166,9 +173,9 @@ class _RingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final c = size.center(Offset.zero);
-    final r = min(size.width, size.height) / 2 - 6;
+    final r = RingGauge.radiusIn(min(size.width, size.height));
     final rect = Rect.fromCircle(center: c, radius: r);
-    final w = r * 0.085;
+    final w = r * RingGauge.arcWidth;
 
     Paint stroke(Color color) => Paint()
       ..style = PaintingStyle.stroke
@@ -268,6 +275,9 @@ class _RingPainter extends CustomPainter {
     // Laid out once per size: this paints up to 45 times a second.
     if (_glyphsFor != (text, style)) {
       _glyphsFor = (text, style);
+      for (final g in _glyphs) {
+        g.dispose();
+      }
       _glyphs = [
         for (final ch in text.split('')) TextPainter(text: TextSpan(text: ch, style: style), textDirection: TextDirection.ltr)..layout(),
       ];

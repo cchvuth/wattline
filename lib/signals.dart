@@ -68,13 +68,14 @@ const kSignals = <String, Sig>{
   // this car). A capture-all in the car read 40/40/20/20 under a light
   // press and 0 released. The pressure and rod-travel frames of the party
   // DBC (0x38D, 0x3AF, 0x39D) never followed the pedal or never came.
-  'brakeFL': Sig(0x185, 0, 12, scale: 2),
-  'brakeFR': Sig(0x185, 12, 12, scale: 2),
-  'brakeRL': Sig(0x185, 24, 12, scale: 2),
-  'brakeRR': Sig(0x185, 36, 12, scale: 2),
+  // All ones (8190 Nm) taken as not available, as a booting module sends.
+  'brakeFL': Sig(0x185, 0, 12, scale: 2, sna: 4095),
+  'brakeFR': Sig(0x185, 12, 12, scale: 2, sna: 4095),
+  'brakeRL': Sig(0x185, 24, 12, scale: 2, sna: 4095),
+  'brakeRR': Sig(0x185, 36, 12, scale: 2, sna: 4095),
   // The steering wheel's angle, deg, for the path lines: ID129
   // SCCM_steeringAngle (positive to the right on this car).
-  'steerSccm': Sig(0x129, 16, 14, scale: 0.1, offset: -819.2),
+  'steerSccm': Sig(0x129, 16, 14, scale: 0.1, offset: -819.2, sna: 16383),
 
   // ID2E5 FrontInverterPower / ID266 RearInverterPower. Firmware 2026.38
   // repacked both into 7 bytes: the power moved from 0|11 to 41|11, after

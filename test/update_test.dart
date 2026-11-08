@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tesla_dash/update.dart';
 
@@ -24,9 +25,32 @@ void main() {
     expect(u.version, '1.0.1');
     expect(u.arm64, 'https://x/Wattline-Android.apk');
     expect(pickUpdate(release('v1.0.0', both), '1.0.0-abc-1108-0000'), isNull);
-    // A release from before the rename: its APKs' old names still do.
-    final old = pickUpdate(release('v1.0.1', ['Tesla-Dash-Android.apk', 'Tesla-Dash-Android-older-phones.apk']), '1.0.0')!;
-    expect(old.arm64, 'https://x/Tesla-Dash-Android.apk');
     expect(pickUpdate(release('v1.0.1', both.take(1).toList()), '1.0.0'), isNull);
+  });
+
+  // GitHub saying something odd (not an object, an asset still uploading
+  // with no URL) is no update, not an error out of the check.
+  test('an odd release reply is no update', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    var reply = '[1]';
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('tesla_dash/net'), (call) async => call.method == 'latestRelease' ? reply : null);
+    expect(await checkUpdate('1.0.0'), isNull);
+    reply = jsonEncode({
+      'tag_name': 'v1.0.1',
+      'assets': [
+        {'name': 'Wattline-Android.apk', 'browser_download_url': null},
+      ],
+    });
+    expect(await checkUpdate('1.0.0'), isNull);
+  });
+
+  // The install call failing on the platform side is a reason to show, not an
+  // error left uncaught (which would leave the update busy for good).
+  test('a platform error installing is a reason', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('tesla_dash/net'), (call) async => throw PlatformException(code: 'gone', message: 'no activity'));
+    expect(await installUpdate((version: '1.0.1', arm64: 'a', any: 'b')), 'no activity');
   });
 }

@@ -209,8 +209,8 @@ class MainActivity : FlutterActivity() {
                     )
                     "latestRelease" -> Thread {
                         val json = try {
-                            fetch("https://api.github.com/repos/cchvuth/wattline/releases/latest")
-                                .inputStream.bufferedReader().readText()
+                            val conn = fetch("https://api.github.com/repos/cchvuth/wattline/releases/latest")
+                            try { conn.inputStream.bufferedReader().use { it.readText() } } finally { conn.disconnect() }
                         } catch (e: Exception) {
                             null
                         }
@@ -259,7 +259,11 @@ class MainActivity : FlutterActivity() {
         conn.connectTimeout = 15000
         conn.readTimeout = 30000
         conn.instanceFollowRedirects = true // the asset lives on another host
-        if (conn.responseCode !in 200..299) throw Exception("HTTP ${conn.responseCode}")
+        val code = conn.responseCode
+        if (code !in 200..299) {
+            conn.disconnect()
+            throw Exception("HTTP $code")
+        }
         return conn
     }
 
@@ -272,26 +276,46 @@ class MainActivity : FlutterActivity() {
         val pi = packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
             .apply { setAppPackageName(packageName) }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-        }
         val id = pi.createSession(params)
-        pi.openSession(id).use { session ->
-            fetch(url).inputStream.use { input ->
-                session.openWrite("update.apk", 0, -1).use { out ->
-                    input.copyTo(out)
-                    session.fsync(out)
+        try {
+            pi.openSession(id).use { session ->
+                val conn = fetch(url)
+                try {
+                    conn.inputStream.use { input ->
+                        session.openWrite("update.apk", 0, -1).use { out ->
+                            input.copyTo(out)
+                            session.fsync(out)
+                        }
+                    }
+                } finally {
+                    conn.disconnect()
                 }
+                registerInstallStatus()
+                val intent = Intent(INSTALL_STATUS).setPackage(packageName)
+                val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                    (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+                session.commit(PendingIntent.getBroadcast(this, id, intent, flags).intentSender)
             }
-            registerInstallStatus()
-            val intent = Intent(INSTALL_STATUS).setPackage(packageName)
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
-                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
-            session.commit(PendingIntent.getBroadcast(this, id, intent, flags).intentSender)
+        } catch (e: Exception) {
+            pi.abandonSession(id) // a half-written APK no longer staged
+            throw e
         }
     }
 
     private var installStatus: BroadcastReceiver? = null
+    private var inFront = false
+    private var pendingConfirm: Intent? = null
+
+    override fun onResume() {
+        super.onResume()
+        inFront = true
+        pendingConfirm?.let { pendingConfirm = null; startActivity(it) }
+    }
+
+    override fun onPause() {
+        inFront = false
+        super.onPause()
+    }
 
     /** Shows Android's own confirmation, and tells the dash a failure. */
     private fun registerInstallStatus() {
@@ -302,7 +326,9 @@ class MainActivity : FlutterActivity() {
                     PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                         @Suppress("DEPRECATION")
                         val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
-                        confirm?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                            ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        // From the background Android blocks it: shown when the app is back.
+                        if (inFront) confirm?.let { startActivity(it) } else pendingConfirm = confirm
                     }
                     PackageInstaller.STATUS_SUCCESS -> {}
                     else -> channel?.invokeMethod(

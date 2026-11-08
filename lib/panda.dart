@@ -67,8 +67,15 @@ class Panda extends ChangeNotifier {
   }
 
   /// A rear-motor car (picked on the first launch): no front motor frames,
-  /// so the blend gives the rear all the motors' power.
-  bool rwd = false;
+  /// so the blend gives the rear all the motors' power. Picked mid-drive,
+  /// the last front reading goes too.
+  bool get rwd => _rwd;
+  set rwd(bool v) {
+    _rwd = v;
+    if (v) _frontAt = frontKw = null;
+  }
+
+  bool _rwd = false;
 
   bool get _stopped => speed == 0 && (pedalPct ?? 0) == 0;
 
@@ -106,12 +113,9 @@ class Panda extends ChangeNotifier {
   /// (it shares this class's native channel); the dash says so.
   void Function(String why)? onUpdateFailed;
 
-  /// The steering wheel's angle from ID129, deg, as the car sends it.
-  double? _steerSccm;
-
   /// The steering wheel's angle, deg, left positive: the car picture's path
-  /// lines, from ID129 ([_steerSccm]) with its sign flipped: the car's own
-  /// reading is positive to the right (seen in the car, 2026-11-08). Its
+  /// lines, from ID129 with its sign flipped: the car's own reading is
+  /// positive to the right (as the car showed). Its
   /// range is the DBC's; seen in the car from -399 to +258.
   double? get steerDeg => _steerDeg;
   set steerDeg(double? v) {
@@ -136,7 +140,7 @@ class Panda extends ChangeNotifier {
 
   /// The four wheels' brake torque the ring calls full braking, Nm.
   /// About what a 2 t car stopping at 0.6 g takes at its wheels; with the
-  /// square root in [brakePct] it looked right in the car (2026-11-08).
+  /// square root in [brakePct] it looks right in the car.
   static const brakeFullNm = 4000.0;
   double? socPct;
   double? rangeMi;
@@ -407,13 +411,13 @@ class Panda extends ChangeNotifier {
           _ => '${id.toRadixString(16)}[none]',
         };
     final b = _bt;
-    return 'wifi "$status" ${frameHz}Hz speed ${speedHz}Hz gap ${speedGapMs}ms foreign ${foreignHz}Hz resubs $resubscribes subs $subscribes acks $acks sparse ${_sparseWanted ? '' : 'off '}$sparseOps/$sparseFixes live=$wifiLive viaBt=$viaBt gear=$gear speed=$speed '
+    return 'wifi "$status" ${frameHz}Hz speed ${speedHz}Hz gap ${speedGapMs}ms foreign ${foreignHz}Hz resubs $resubscribes subs $subscribes acks $acks sparse ${_sparseWanted ? '' : 'off '}$sparseOps/$sparseFixes skip=${_skip.map((i) => i.toRadixString(16)).join(',')} live=$wifiLive viaBt=$viaBt gear=$gear speed=$speed '
         'front=$frontKw rear=$rearKw pack=${packKw?.toStringAsFixed(1)} climate=${climateKw?.toStringAsFixed(2)} 12v=${lvKw?.toStringAsFixed(2)} other=${otherKw?.toStringAsFixed(2)} regenMax=$regenMaxKw | ${raw(0x2E5)} | ${raw(0x266)} | ${raw(0x252)} | '
         'bt ${b == null ? '-' : (b.keys.where((k) => b[k] is num).toList()..sort()).map((k) => '$k=${b[k]}').join(' ')} | '
         'now 118 ${hexOf(frames[0x118]?.data ?? const [])} 2b6 ${hexOf(frames[0x2B6]?.data ?? const [])} '
         'brake=$braking slippery=$slippery | '
         'brake Nm=${_brakeNm.values.fold(0.0, (a, b) => a + b).toStringAsFixed(0)} pct=${brakePct?.toStringAsFixed(1)} | ${raw(0x185)} | '
-        'steer sccm=$_steerSccm/${frames[0x129]?.count ?? 0} ${hexOf(frames[0x129]?.data ?? const [])}';
+        'steer deg=$steerDeg/${frames[0x129]?.count ?? 0} ${hexOf(frames[0x129]?.data ?? const [])}';
   }
 
   /// Every signal as decoded from the newest payload that carries it (a
@@ -603,11 +607,12 @@ class Panda extends ChangeNotifier {
     }
   }
 
-  Future<bool> _wifiNearby(String ssid) async {
+  /// Whether the phone sees the network; null when it cannot tell.
+  Future<bool?> _wifiNearby(String ssid) async {
     try {
-      return await _net.invokeMethod<bool>('wifiNearby', {'ssid': ssid, 'ms': lookMs}) ?? true;
+      return await _net.invokeMethod<bool>('wifiNearby', {'ssid': ssid, 'ms': lookMs});
     } on PlatformException {
-      return true;
+      return null;
     }
   }
 
@@ -704,7 +709,8 @@ class Panda extends ChangeNotifier {
     // the Commander: with ScanMyTesla off it has no WiFi to show up.
     final awake = _awake;
     _awake = false;
-    final near = !Platform.isAndroid || awake || await _wifiNearby(c.ssid);
+    final seen = Platform.isAndroid && !awake ? await _wifiNearby(c.ssid) : null; // null: not looked, or cannot tell
+    final near = seen ?? true;
     if (gen != _gen) return;
     if (!near) {
       // A car that is away is looked for every 10 s.
@@ -721,9 +727,11 @@ class Panda extends ChangeNotifier {
     _set(WifiLink.joining, 'joining ${c.ssid}…${Platform.isAndroid ? ' approve the wifi dialog if asked' : ''}');
     if (!await _bindWifi(c.ssid, c.password)) {
       if (gen != _gen) return;
-      // The network was in range, so a failed join is most often a wrong
-      // password (or the phone's approval declined): say where to change it.
-      _scheduleRetry('could not join ${c.ssid}: wrong password? Change it in the settings');
+      // Seen in range, a failed join is most often a wrong password (or the
+      // phone's approval declined): say where to change it.
+      _scheduleRetry(seen == true
+          ? 'could not join ${c.ssid}: wrong password? Change it in the settings'
+          : 'could not join ${c.ssid}: not in range, or a wrong password?');
       return;
     }
     if (gen != _gen) return; // disconnected or restarted while binding
@@ -867,7 +875,7 @@ class Panda extends ChangeNotifier {
     speed = 0;
     frontKw = rearKw = pedalPct = packKw = _packV = _frontAt = _rearAt = _other = null;
     lvKw = _compKw = _heatLKw = _heatRKw = _lvV = null;
-    brakePct = _steerSccm = steerDeg = null;
+    brakePct = steerDeg = null;
     _brakeNm.clear();
     _compOk = false;
   }
@@ -1046,6 +1054,13 @@ class Panda extends ChangeNotifier {
   /// The next slot: each group on or off as the wheel says, whatever it was.
   void _sparseTick() {
     if (_all) return;
+    // A skipped id whose frames still come: its remove was lost; again.
+    if (_skipStray >= 3) {
+      sparseFixes++;
+      _skipAt = DateTime.now();
+      _sendIds(0x0e, _skip);
+    }
+    _skipStray = 0;
     if (!_sparseWanted) {
       // Everything on, and said again each round: this is UDP, and with the
       // wheel stopped a lost add would leave a group dark for the drive.
@@ -1053,17 +1068,10 @@ class Panda extends ChangeNotifier {
         _sparseAll = false;
         _sparseOn.clear();
         sparseOps++;
-        _sendIds(0x0f, polledIds.where((i) => !_skip.contains(i)).toList());
+        _sendIds(0x0f, polledIds);
       }
       return;
     }
-    // A skipped id whose frames still come: its remove was lost; again.
-    if (_skipStray >= 3) {
-      sparseFixes++;
-      _skipAt = DateTime.now();
-      _sendIds(0x0e, _skip.toList());
-    }
-    _skipStray = 0;
     final slot = _wheel[_slot++ % _wheel.length];
     final parked = _gear == 'P', left = _wasParked && !parked;
     final hot = DateTime.now().isBefore(_hotUntil);
@@ -1084,12 +1092,14 @@ class Panda extends ChangeNotifier {
       _sparseOn[i] = want;
       if (!want) _sparseOffAt[i] = DateTime.now();
       sparseOps++;
-      _sendIds(want ? 0x0f : 0x0e, want ? g.ids.where((i) => !_skip.contains(i)).toList() : g.ids);
+      _sendIds(want ? 0x0f : 0x0e, g.ids);
     }
   }
 
-  void _sendIds(int op, List<int> ids) {
-    if (ids.isNotEmpty) _send([op, for (final id in ids) ...[0xff, id >> 8, id & 0xff]]);
+  /// Adds (0x0f) or removes (0x0e) [ids]; a skipped id is never added.
+  void _sendIds(int op, Iterable<int> ids) {
+    final send = [for (final id in ids) if (op != 0x0f || !_skip.contains(id)) id];
+    if (send.isNotEmpty) _send([op, for (final id in send) ...[0xff, id >> 8, id & 0xff]]);
   }
 
   /// Ids nothing on screen shows now (the basic layout's hidden cards): not
@@ -1103,13 +1113,23 @@ class Panda extends ChangeNotifier {
     _skipAt = DateTime.now();
     if (_all) return;
     _sendIds(0x0e, drop.toList());
-    // Back on: a streamed id at once, a polled one if its group is on now.
+    // Back on: a streamed id at once, a polled one if its group is on now,
+    // else at its group's slot (2-8 s): all at once would be the burst the
+    // wheel is there to avoid.
     _sendIds(0x0f, [
       for (final id in back)
         if (alwaysOn.contains(id) || !_sparseWanted || (_sparseOn[_sparseOf[id]] ?? true)) id,
     ]);
+    // A lost add would leave a streamed id dark (the wheel re-adds only polled
+    // ones): said again for a few seconds ([_tick]), with those still due
+    // from a swipe just before.
+    final now = DateTime.now();
+    _back = {if (now.isBefore(_backUntil)) ..._back, for (final id in back) if (alwaysOn.contains(id)) id};
+    _backUntil = now.add(const Duration(seconds: 3));
   }
 
+  Set<int> _back = const {};
+  DateTime _backUntil = DateTime.fromMillisecondsSinceEpoch(0);
   Set<int> _skip = const {};
   DateTime _skipAt = DateTime.fromMillisecondsSinceEpoch(0);
   int _skipStray = 0;
@@ -1132,6 +1152,7 @@ class Panda extends ChangeNotifier {
       _scheduleRetry(_lastRecv == null ? 'Commander not answering' : 'link lost');
       return;
     }
+    if (DateTime.now().isBefore(_backUntil)) _sendIds(0x0f, _back); // [skip]'s, in case one was lost
     if (_wheelOn) {
       _sparseTick();
       // A slot is half a second. Looked at again: the link may be gone by then.
@@ -1238,7 +1259,7 @@ class Panda extends ChangeNotifier {
       _startCount(_canAt);
     }
     _frameCount++;
-    if (_skip.contains(id) && DateTime.now().difference(_skipAt).inMilliseconds > 300) _skipStray++;
+    if (!_all && _skip.contains(id) && DateTime.now().difference(_skipAt).inMilliseconds > 300) _skipStray++;
     if (_sparseOf[id] case final n?) {
       final off = _sparseOffAt[n];
       if (_sparseOn[n] == false && off != null && DateTime.now().difference(off).inMilliseconds > 300) {
@@ -1257,6 +1278,13 @@ class Panda extends ChangeNotifier {
     f.data = data;
     f.remember(data);
 
+    if (id == 0x185) {
+      // All four wheels in each frame: one not available drops out, and none
+      // at all is no reading, never the last one frozen.
+      _brakeNm.clear();
+      brakePct = null;
+    }
+    if (id == 0x129) _steerDeg = null; // likewise: not available is no path lines
     for (final e in _byId[id] ?? const <MapEntry<String, Sig>>[]) {
       final v = decode(e.value, data);
       if (v == null) continue;
@@ -1402,7 +1430,7 @@ class Panda extends ChangeNotifier {
           // The front light bar: DRL by day, the position lamp with
           // headlights or parking lights (CUSTOM light shows excluded).
           drl = v == 15 ? null : v >= 1 && v <= 4;
-        case 'frontKw':
+        case 'frontKw' when !rwd:
           _frontAt = v;
           _motorFrame();
           _blend();
@@ -1411,7 +1439,6 @@ class Panda extends ChangeNotifier {
           _motorFrame();
           _blend();
         case 'steerSccm':
-          _steerSccm = v;
           steerDeg = -v; // the path lines: this frame is positive to the right, as the car showed
         case 'brakeFL' || 'brakeFR' || 'brakeRL' || 'brakeRR':
           _brakeNm[e.key] = v;

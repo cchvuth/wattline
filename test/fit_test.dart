@@ -312,6 +312,24 @@ void main() {
     expect(find.textContaining('the dash joins the MyCommander WiFi by itself'), findsOneWidget);
     final prefs = await SharedPreferences.getInstance();
     expect((prefs.getString('ssid'), prefs.getString('password')), ('MyCommander', 'hunter22'));
+    // Back in the settings, their fields have the new login: saving keeps it.
+    Future<void> closeSetup() async {
+      for (var i = 0; i < 2; i++) {
+        await t.tap(find.text('Done'));
+        await _frames(t);
+      }
+    }
+
+    await closeSetup();
+    String field(String label) => t.widget<TextField>(find.widgetWithText(TextField, label)).controller!.text;
+    expect((field('WiFi name'), field('WiFi password')), ('MyCommander', 'hunter22'));
+    // Typed there, the setup steps only looked at: what is typed stays.
+    await t.enterText(find.widgetWithText(TextField, 'WiFi password'), 'typed');
+    await t.ensureVisible(find.text('Setup steps'));
+    await t.tap(find.text('Setup steps'));
+    await _frames(t);
+    await closeSetup();
+    expect(field('WiFi password'), 'typed');
     await t.pump(const Duration(seconds: 1)); // the fields' delayed disposal
     await t.pumpWidget(const SizedBox());
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));

@@ -138,7 +138,8 @@ and the recirculation state. Only tested with the Commander so far.
 1. In the S3XY app: Commander › Scan My Tesla, turn on **ScanMyTesla
    support** and **ScanMyTesla Always ON**. The Commander then raises the
    `S3XY_OBD` network (password `12345678`). Skip this step to run on
-   Bluetooth only.
+   Bluetooth only, and turn off **Bluetooth waits for the WiFi stream** in
+   the settings (on by default, it holds Bluetooth until the stream runs).
 2. Open the dash. The first launch asks which car (Model Y, 5 or 7 seats,
    and a 5-seater's drive), then shows these steps, step 1 with the S3XY
    app's own screens, before the phone asks for its permissions.
@@ -181,7 +182,10 @@ ARM), `Wattline-Android-older-phones.apk` for any phone. The tests and
 the two builds run side by side. Release builds are signed with the debug
 key: store the Mac's
 `~/.android/debug.keystore`, base64, as the `DEBUG_KEYSTORE` secret, and the
-CI APK installs over a local build without losing the app's settings.
+CI's 64-bit APK installs over a local build made the same way
+(`--split-per-abi --target-platform android-arm64`) without losing the app's
+settings. The older-phones APK carries a lower version code, so Android won't
+put it over the 64-bit one (uninstall first).
 
 iOS needs Xcode as the selected developer directory, because native-asset
 build hooks ignore `DEVELOPER_DIR`:

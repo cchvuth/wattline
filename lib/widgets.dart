@@ -4,15 +4,13 @@
 part of 'main.dart';
 
 /// Digital speed in the ring's hole, the limit sign above it, the cruise or
-/// charge cue below; under them the gear, where [gear] asks for it (the
-/// compact dash has it in its corner).
+/// charge cue below; under them the gear, a tap on it calling [onGear] (the
+/// full and basic layouts swap). Without [onGear] no gear: the compact dash
+/// has it in its corner.
 class _Centre extends StatelessWidget {
-  const _Centre({required this.obd, this.gear = false, this.onGear});
+  const _Centre({required this.obd, this.onGear});
 
   final Panda obd;
-  final bool gear;
-
-  /// A tap on the gear: the full and the basic layout swap.
   final VoidCallback? onGear;
 
   @override
@@ -73,8 +71,8 @@ class _Centre extends StatelessWidget {
           ),
           // Only the gear engaged, in the gap the ring leaves at its foot,
           // clear of the brake's arc there.
-          // A finger's room round it to tap (the letter where it was).
-          if (gear)
+          // A finger's room round it to tap; the -8 keeps the letter in place.
+          if (onGear != null)
             Positioned(
               bottom: c.maxHeight * 0.05 - 8,
               child: GestureDetector(
@@ -104,11 +102,15 @@ class _Centre extends StatelessWidget {
     const drop = GlyphIcon(Glyph.washer, size: 15, color: kWarn);
     if (charge) {
       final max = o.chargeMaxKw, why = o.chargeWhy;
-      if (max == null && why == null) return null;
-      return Text.rich(TextSpan(children: [
-        if (max != null) TextSpan(text: 'MAX ${max.round()}', style: s.copyWith(color: Colors.white70)),
-        if (why != null) TextSpan(text: '${max != null ? ' · ' : ''}$why', style: s.copyWith(color: kWarn)),
-      ]));
+      if (max != null || why != null) {
+        return Row(mainAxisSize: MainAxisSize.min, children: [
+          Text.rich(TextSpan(children: [
+            if (max != null) TextSpan(text: 'MAX ${max.round()}', style: s.copyWith(color: Colors.white70)),
+            if (why != null) TextSpan(text: '${max != null ? ' · ' : ''}$why', style: s.copyWith(color: kWarn)),
+          ])),
+          if (washer) ...[const SizedBox(width: 12), drop],
+        ]);
+      }
     }
     final set = o.wifiLive ? o.cruiseSet : null;
     if (set != null) {
@@ -178,7 +180,7 @@ class _Outside extends StatelessWidget {
         child: Text(c == null ? '—' : _deg(c),
             style: TextStyle(
                 fontSize: 16,
-                color: c != null && c <= 3 ? kCold : Colors.white,
+                color: _airColor(c),
                 fontFeatures: const [FontFeature.tabularFigures()])),
       ),
     );
@@ -186,30 +188,33 @@ class _Outside extends StatelessWidget {
 }
 
 /// The Autopilot icon ([_autopilot]): its glyph on a [disc] of that colour,
-/// white on it (dark on amber, which white does not read on), [flash]ing
-/// twice a second, [struck] through when locked out.
+/// white on it (dark on amber, which white does not read on), blinking while
+/// [flash], [struck] through when locked out. Its words on a long press.
 class _ApIcon extends StatefulWidget {
   const _ApIcon({
     required this.disc,
-    required this.glyph,
-    required this.flash,
-    required this.struck,
     required this.words,
-    required this.size,
+    this.glyph = Glyph.autopilot,
+    this.flash = false,
+    this.struck = false,
   });
+
+  static const size = 30.0;
 
   final Color disc;
   final Glyph glyph;
   final bool flash, struck;
   final String words;
-  final double size;
 
   @override
   State<_ApIcon> createState() => _ApIconState();
 }
 
-class _ApIconState extends State<_ApIcon> with SingleTickerProviderStateMixin {
-  late final _blink = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
+class _ApIconState extends State<_ApIcon> {
+  // A hard blink, 4 frames a second: a fade would redraw at the screen's rate
+  // for as long as the nag lasts.
+  Timer? _blink;
+  bool _dim = false;
 
   @override
   void initState() {
@@ -224,29 +229,30 @@ class _ApIconState extends State<_ApIcon> with SingleTickerProviderStateMixin {
   }
 
   void _fit() {
-    if (widget.flash && !_blink.isAnimating) {
-      _blink.repeat(reverse: true);
-    } else if (!widget.flash && _blink.isAnimating) {
-      _blink
-        ..stop()
-        ..value = 0;
+    if (widget.flash) {
+      _blink ??= Timer.periodic(const Duration(milliseconds: 250), (_) => setState(() => _dim = !_dim));
+    } else {
+      _blink?.cancel();
+      _blink = null;
+      _dim = false;
     }
   }
 
   @override
   void dispose() {
-    _blink.dispose();
+    _blink?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final w = widget, size = w.size;
+    final w = widget;
+    const size = _ApIcon.size;
     final mark = w.disc == kWarn ? Colors.black : Colors.white;
     return Tooltip(
       message: w.words,
-      child: FadeTransition(
-        opacity: Tween(begin: 1.0, end: 0.2).animate(_blink),
+      child: Opacity(
+        opacity: _dim ? 0.2 : 1,
         child: Container(
           width: size,
           height: size,
@@ -255,7 +261,7 @@ class _ApIconState extends State<_ApIcon> with SingleTickerProviderStateMixin {
           // The wheel is drawn to the disc's own size; the gauge smaller.
           child: Stack(alignment: Alignment.center, children: [
             GlyphIcon(w.glyph, size: w.glyph == Glyph.autopilot ? size : size * 0.66, color: mark),
-            if (w.struck) CustomPaint(size: Size.square(size), painter: _Strike(w.disc, mark)),
+            if (w.struck) CustomPaint(size: const Size.square(size), painter: _Strike(w.disc, mark)),
           ]),
         ),
       ),
@@ -285,18 +291,25 @@ class _Strike extends CustomPainter {
   bool shouldRepaint(_Strike old) => old.disc != disc || old.mark != mark;
 }
 
+/// A card of [_Cards]: [child] laid out at the card's size over [scale] and
+/// scaled up by it, so cards of one scale share a text size (a graphic takes
+/// the room its text leaves; [_fit] centres fixed-size content); or, with
+/// [_Card.fill], a picture built for the card's height at its own size.
+class _Card {
+  const _Card(Widget this.child, {this.scale = kBasicFigures}) : fill = null;
+  const _Card.fill(Widget Function(double height) this.fill) : child = null, scale = 1;
+
+  final Widget? child;
+  final Widget Function(double height)? fill;
+  final double scale;
+}
+
 /// Basic layout's stack of cards beside the ring: one shows, filling the
-/// side; a swipe up or down brings the next, and dots at the side say
-/// which. Every card is laid out in its card's size over [_scale] and then
-/// scaled up by it, so text is one size across cards; a card fills that box
-/// itself (a graphic takes the room its text leaves; [_fit] centres
-/// fixed-size content, shrunk only if too big). A [_Fill] card, a picture,
-/// is as large as its card allows.
-/// ponytail: one fixed scale, set for the S23 Ultra's 823 x 384 dp.
+/// side; a swipe up or down brings the next, and dots at the side say which.
 class _Cards extends StatefulWidget {
   const _Cards({super.key, required this.cards, this.initial = 0, this.onPage, this.dotsLeft = false});
 
-  final List<Widget> cards;
+  final List<_Card> cards;
   final bool dotsLeft; // the dots on the screen's edge: the left stack's at its left
   final int initial; // the card shown first
   final ValueChanged<int>? onPage;
@@ -306,7 +319,6 @@ class _Cards extends StatefulWidget {
 }
 
 class _CardsState extends State<_Cards> {
-  static const _scale = 1.22; // every card's text, over the full layout's: the widest row (a label and its value) just fits
   late int _page = widget.initial.clamp(0, widget.cards.length - 1);
   late final _ctrl = PageController(initialPage: _page);
 
@@ -335,19 +347,20 @@ class _CardsState extends State<_Cards> {
             },
             children: [
               for (final c in widget.cards)
-                c is _Fill
-                    ? LayoutBuilder(
-                        builder: (context, box) => Padding(
-                            padding: EdgeInsets.fromLTRB(pad.left, 0, pad.right, 0), child: c.builder(box.maxHeight)))
-                    : Padding(
-                        padding: pad,
-                        child: LayoutBuilder(
-                          builder: (context, box) => FittedBox(
-                            fit: BoxFit.fill,
-                            child: SizedBox(width: box.maxWidth / _scale, height: box.maxHeight / _scale, child: c),
-                          ),
-                        ),
+                if (c.fill case final fill?)
+                  LayoutBuilder(
+                      builder: (context, box) =>
+                          Padding(padding: EdgeInsets.fromLTRB(pad.left, 0, pad.right, 0), child: fill(box.maxHeight)))
+                else
+                  Padding(
+                    padding: pad,
+                    child: LayoutBuilder(
+                      builder: (context, box) => FittedBox(
+                        fit: BoxFit.fill,
+                        child: SizedBox(width: box.maxWidth / c.scale, height: box.maxHeight / c.scale, child: c.child),
                       ),
+                    ),
+                  ),
             ],
           ),
           Positioned(
@@ -389,12 +402,13 @@ class _BasicCar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final h = height;
-    // Forward: 0.26 of the car over its top for the beams (the low one ends
-    // at 0.23 past the nose, the high one at 0.38, fading), the car and its
-    // brake glow (0.02) under it. Reverse: its paths end 0.175 of it past the
-    // tail, on the card.
-    final car = (h + above) / 1.28;
-    final top = obd.gear == 'R' ? h - 2 - 1.175 * car : 0.26 * car - above;
+    // Forward: room over it for the beams (the low one ends 0.23 of the car
+    // past the nose, the high one fades out by 0.38), the car, and its brake
+    // glow under it. Reverse: its paths end on the card.
+    const beams = 0.26, glow = 0.02;
+    final behind = 1 - _Car.pathFrom.$1 + _Car.pathBehind;
+    final car = (h + above) / (beams + 1 + glow);
+    final top = obd.gear == 'R' ? h - 2 - behind * car : beams * car - above;
     return Stack(clipBehavior: Clip.none, children: [
       AnimatedPositioned(
         duration: const Duration(milliseconds: 350),
@@ -402,23 +416,10 @@ class _BasicCar extends StatelessWidget {
         top: top - _Cabin.fillInset(context),
         left: 0,
         right: 0,
-        // Its figures a little over the full layout's, whatever the car's size.
-        child: Center(child: _Cabin(obd: obd, figures: 1.38, carHeight: car)),
+        child: Center(child: _Cabin(obd: obd, carHeight: car)),
       ),
     ]);
   }
-}
-
-/// A card of [_Cards] that fills it, as large as it fits.
-class _Fill extends StatelessWidget {
-  const _Fill(this.builder);
-
-  /// The picture for the card's height; drawn at the size it asks, not
-  /// scaled with the cards' text.
-  final Widget Function(double height) builder;
-
-  @override
-  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) => builder(box.maxHeight));
 }
 
 /// The route the car is driving, along the foot of the dash: time to go,
@@ -433,13 +434,12 @@ class _Fill extends StatelessWidget {
 /// from the car's API through the Commander's own link to the car. Values
 /// without data stay hidden.
 class _Nav extends StatelessWidget {
-  const _Nav({required this.obd, required this.bt, this.oneLine = false, this.tall = false, this.size = 1});
+  const _Nav({required this.obd, required this.bt, this.oneLine = false, this.tall = false});
 
   final Panda obd;
   final Commander bt;
   final bool oneLine; // the compact dash: one row under the ring
   final bool tall; // basic's card: the place, then a value a line
-  final double size; // its text over the bar's, as [_statRow]'s (basic: the full layout's on screen)
 
   @override
   Widget build(BuildContext context) {
@@ -451,7 +451,7 @@ class _Nav extends StatelessWidget {
         : bt.navDest != null || mins > 0;
     if (!route) {
       return tall
-          ? Text('NO ROUTE', style: TextStyle(fontSize: 14 * size, letterSpacing: 2 * size, color: Colors.white38))
+          ? const Text('NO ROUTE', style: TextStyle(fontSize: 14, letterSpacing: 2, color: Colors.white38))
           : const SizedBox.shrink();
     }
     final trip = mins > 0; // none yet, or a finished route's zeros
@@ -475,7 +475,7 @@ class _Nav extends StatelessWidget {
     // height at the text cap, so the ring keeps its size as a route comes
     // and goes.
     final big = TextStyle(
-        fontSize: (tall ? 16 : 18) * size, height: 1.1, color: Colors.white, fontFeatures: const [FontFeature.tabularFigures()]);
+        fontSize: tall ? 16 : 18, height: 1.1, color: Colors.white, fontFeatures: const [FontFeature.tabularFigures()]);
     final togo = m < 1 ? '<1 min' : m < 60 ? '$m min' : '${m ~/ 60}h ${m % 60}m';
     // The arrival clock, in the phone's 12 or 24 hour format.
     final clock = TimeOfDay.fromDateTime(
@@ -484,12 +484,12 @@ class _Nav extends StatelessWidget {
     // Every value after its icon; [note]: a smaller grey figure after it.
     Widget stat(IconData icon, String text, {TextStyle? style, String? note}) =>
         Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 15 * size, color: Colors.white70),
-          SizedBox(width: 4 * size),
+          Icon(icon, size: 15, color: Colors.white70),
+          const SizedBox(width: 4),
           Text.rich(
               TextSpan(text: text, children: [
                 if (note != null)
-                  TextSpan(text: note, style: TextStyle(fontSize: 14 * size, color: Colors.white54)),
+                  TextSpan(text: note, style: const TextStyle(fontSize: 14, color: Colors.white54)),
               ]),
               style: style ?? big),
         ]);
@@ -529,12 +529,12 @@ class _Nav extends StatelessWidget {
       // As wide as its card lets it (the name wraps there, never shrinking
       // the rest), and no wider than this.
       return ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: 240 * size),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, spacing: 6 * size, children: [
+        constraints: const BoxConstraints(maxWidth: 240),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, spacing: 6, children: [
           if (bt.navDest case final dest?)
-            Text(dest, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16 * size, color: Colors.white))
+            Text(dest, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, color: Colors.white))
           else
-            Text('DESTINATION', style: TextStyle(fontSize: 11 * size, letterSpacing: 1.5 * size, color: Colors.white70)),
+            const Text('DESTINATION', style: TextStyle(fontSize: 11, letterSpacing: 1.5, color: Colors.white70)),
           if (trip) ...[stat(Icons.hourglass_bottom, togo), stat(Icons.flag, clock)],
           if (length != null) stat(Icons.route, length),
           if (dist != null) stat(Icons.electric_car, dist, note: drop <= 0 ? null : ' −$drop'),
@@ -992,7 +992,7 @@ class _Actions extends StatelessWidget {
 /// with the car's snowflake while too cold for full regen and power, a red
 /// up arrow while it heats, and the target a preconditioning heats it to.
 class _Battery extends StatelessWidget {
-  const _Battery({required this.obd, this.width = 88});
+  const _Battery({required this.obd, this.width = 128});
 
   final Panda obd;
   final double width; // shown this wide, drawn at 104 x 98
@@ -1025,9 +1025,9 @@ class _Battery extends StatelessWidget {
                   if (cold) const Icon(Icons.ac_unit, size: 14, color: kCold),
                   if (t != null)
                     Text.rich(
-                        TextSpan(text: '${t.abs() < 10 ? t.toStringAsFixed(1) : t.round()}°', children: [
+                        TextSpan(text: '${t.abs() < 10 ? (t.abs() < 0.05 ? 0.0 : t).toStringAsFixed(1) : t.round()}°', children: [
                           if (o.precondC case final to?)
-                            TextSpan(text: ' → ${to.round()}°', style: const TextStyle(color: kWarn)),
+                            TextSpan(text: ' → ${_deg(to)}', style: const TextStyle(color: kWarn)),
                         ]),
                         style: TextStyle(
                             fontSize: 14,
@@ -1113,9 +1113,10 @@ class _DialPainter extends CustomPainter {
 /// driver (up braking, down speeding up, right in a left turn), its figure
 /// beside it and this drive's peak under that. WiFi only.
 class _GBall extends StatefulWidget {
-  const _GBall({required this.obd, this.tall = false});
+  const _GBall({required this.obd, this.tall = false, this.listen = true});
 
   final Panda obd;
+  final bool listen; // hidden, it holds its place without redrawing
   final bool tall; // basic's card: the ball as big as the room, the figures under it
 
   @override
@@ -1127,8 +1128,12 @@ class _GBallState extends State<_GBall> {
   // fast tick's 45 a second. Still, they gather under the dot.
   final _trail = <Offset>[];
 
+  // Redrawn on the fast tick, on its own layer: the rest of the page stays.
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => RepaintBoundary(
+      child: widget.listen ? ListenableBuilder(listenable: widget.obd.fast, builder: (context, _) => _ball()) : _ball());
+
+  Widget _ball() {
     final o = widget.obd, g = Offset(o.gLat ?? 0, o.gLong ?? 0);
     _trail.add(g);
     if (_trail.length > 10) _trail.removeAt(0);
@@ -1206,56 +1211,43 @@ class _GPainter extends CustomPainter {
   bool shouldRepaint(_GPainter old) => !listEquals(old.trail, trail) || old.peaks != peaks;
 }
 
-/// Temperatures and battery health: the air outside (ice blue from +3 °C
-/// down, where bridges freeze first), washer fluid once it runs low (the
-/// pack's own temperature is in the battery dial); then the spread between the strongest and weakest cell
-/// group, and how far full-pack energy has fallen from the BMS's figure for
-/// it new.
 /// A label and its value, the labels one width so the values line up.
-/// [size]: over the full layout's (a basic card passes the inverse of its
-/// scale, so its rows come out the full layout's size on screen).
-Widget _statRow(BuildContext context, String label, String value, {Color color = Colors.white, double size = 1}) =>
+Widget _statRow(BuildContext context, String label, String value, {Color color = Colors.white}) =>
     Row(mainAxisSize: MainAxisSize.min, children: [
       SizedBox(
-        width: MediaQuery.textScalerOf(context).scale(104) * size, // aligns the values
+        width: MediaQuery.textScalerOf(context).scale(104), // aligns the values
         child: Text(label,
-            maxLines: 1,
-            softWrap: false,
-            style: TextStyle(fontSize: 12 * size, letterSpacing: 0.8 * size, color: Colors.white70)),
+            maxLines: 1, softWrap: false, style: const TextStyle(fontSize: 12, letterSpacing: 0.8, color: Colors.white70)),
       ),
-      Text(value, style: TextStyle(fontSize: 16 * size, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
+      Text(value, style: TextStyle(fontSize: 16, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
     ]);
 
+/// The battery's health: the spread between the strongest and weakest cell
+/// group ([minor]: the full layout hides it unless switched on), and how far
+/// full-pack energy has fallen from the BMS's figure for it new.
 class _Pack extends StatelessWidget {
-  const _Pack({required this.obd, this.outside = true, this.pack = true, this.minor = true, this.size = 1});
+  const _Pack({required this.obd, this.minor = true});
 
   final Panda obd;
-  final bool outside, pack; // the air outside (and washer), the pack's health
-  final bool minor; // the cell imbalance (a switch in the settings hides it)
-  final double size; // [_statRow]'s
+  final bool minor;
 
   @override
   Widget build(BuildContext context) {
-    final o = obd, mv = o.imbalanceMv;
-    final kwh = o.packKwh, isNew = o.packNewKwh;
-    final out = o.outsideC;
-    Widget row(String label, String value, {Color color = Colors.white}) =>
-        _statRow(context, label, value, color: color, size: size);
+    final o = obd, mv = o.imbalanceMv, kwh = o.packKwh, isNew = o.packNewKwh;
     // Shrinks rather than overflows when a large font meets a wide ring.
     return FittedBox(fit: BoxFit.scaleDown, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (outside) ...[
-        row('OUTSIDE', out == null ? '—' : _deg(out), color: out != null && out <= 3 ? kCold : Colors.white),
-      ],
-      if (pack) ...[
-        if (minor) row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
-        row('DEGRADATION', kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
-      ],
+      if (minor) _statRow(context, 'IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
+      _statRow(context, 'DEGRADATION',
+          kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
     ]));
   }
 }
 
-/// The air outside, in whole degrees, the degree sign against the number.
+/// A temperature in whole degrees, the degree sign against the number.
 String _deg(double c) => '${c.round()}°';
+
+/// The air outside's colour: ice blue from +3 °C down, where bridges freeze first.
+Color _airColor(double? c, [Color other = Colors.white]) => c != null && c.round() <= 3 ? kCold : other;
 
 /// European-style sign; blank while the car reports no limit.
 class _SpeedLimit extends StatelessWidget {
@@ -1296,20 +1288,19 @@ class _SpeedLimit extends StatelessWidget {
 /// Slip Start or Off-Road Assist left on names itself (amber on a dry road).
 /// GRIP is WiFi only.
 class _Lights extends StatelessWidget {
-  const _Lights({required this.obd, this.size = 1});
+  const _Lights({required this.obd});
 
   final Panda obd;
-  final double size; // over the full layout's, as [_statRow]'s
 
   @override
   Widget build(BuildContext context) {
     final o = obd;
     Widget lamp(String label, Glyph icon, [Color lit = kRegen]) => Padding(
-          padding: EdgeInsets.symmetric(horizontal: 5 * size),
+          padding: const EdgeInsets.symmetric(horizontal: 5),
           child: Column(children: [
-            GlyphIcon(icon, size: 20 * size, color: lit),
-            SizedBox(height: 2 * size),
-            Text(label, style: TextStyle(fontSize: 12 * size, letterSpacing: 1 * size, color: lit)),
+            GlyphIcon(icon, size: 20, color: lit),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(fontSize: 12, letterSpacing: 1, color: lit)),
           ]),
         );
     final grip = o.wifiLive && o.frames.containsKey(0x2B6) && (o.gripLit || o.tcMode != null);
@@ -1368,27 +1359,27 @@ abstract final class _Car {
   /// whose paths bound the space it sweeps.
   static const pathFrom = (0.355, 0.495);
 
+  /// How far the path lines run, of the car's length: ahead, and behind in R.
+  static const pathAhead = 0.7, pathBehind = 0.53;
+
   /// The steering: the Model Y's 12.1 m turning circle (kerb to kerb, so
   /// 6.05 m to the outer front wheel), 2.89 m wheelbase and 1.66 m track put
   /// the rear axle's centre 4.48 m from the turning point at full lock:
   /// 32.8° for the one road wheel of the bicycle model. The wheel turns about
   /// 450° each way, so a ratio near 13.7:1.
-  /// ponytail: published figures; set them from a full-lock reading once the
-  /// steering frame is confirmed.
+  /// ponytail: published figures; set them from a full-lock reading in the trace.
   static const steerRatio = 13.7, maxRoadDeg = 32.8;
 
   /// The turn signals, each side alike, on the body's edge (the narrower
   /// side of both pictures): at the nose bar's end,
   /// the side repeater on the front wing, at the tail bar's end.
-  static const turns = [
-    [(0.072, 0.329), (0.082, 0.355), (0.093, 0.372), (0.104, 0.386)],
+  static final turns = [
+    nose.sublist(6),
     [(0.259, 0.404), (0.273, 0.401)], // by the wing's camera: a thin, short one
     [(0.9263, 0.272), (0.9193, 0.299), (0.9088, 0.331)],
   ];
 }
 
-/// The indicators' amber.
-const kTurn = Color(0xFFFFB000);
 
 /// The car's lights on its picture: with the DRL thin bars on the nose
 /// (white) and the tail (red) outlines; low beams a cone ahead, high beams a
@@ -1529,7 +1520,7 @@ class _CarLights extends CustomPainter {
         // one dips under the front corner and comes out ahead of it). In
         // reverse the very same shape flipped front to back, ending above the
         // bottom bar.
-        final len = reverse ? h * 0.53 : h * 0.7;
+        final len = h * (reverse ? _Car.pathBehind : _Car.pathAhead);
         for (final s in [-1, 1]) {
           final p = Offset(cx + s * w * _Car.pathFrom.$2, h * _Car.pathFrom.$1);
           final rad = (p - c).distance, a0 = atan2(p.dy - c.dy, p.dx - c.dx);
@@ -1560,8 +1551,8 @@ class _CarLights extends CustomPainter {
       if (rear_) canvas.drawPath(rearPath, line(kAlert.withValues(alpha: brake ? 0.95 : 0.5), brake ? 6 : 3, brake ? 2.5 : 1.5));
       for (final (t, k) in turns) {
         // A wide soft halo and a brighter core round the thin lamp.
-        canvas.drawPath(t, line(kTurn.withValues(alpha: 0.5), 20 * k, 10 * k));
-        canvas.drawPath(t, line(kTurn, 9 * k, 4 * k));
+        canvas.drawPath(t, line(kWarn.withValues(alpha: 0.5), 20 * k, 10 * k));
+        canvas.drawPath(t, line(kWarn, 9 * k, 4 * k));
       }
       return;
     }
@@ -1607,27 +1598,25 @@ class CarSeats extends StatelessWidget {
 /// driver front left: this car is LHD), its lights ([_CarLights]) and each
 /// tyre's pressure (psi) on its wheel. Once the stream is live: on each row
 /// its air temperature and fan as the screen sets it (the third row has no
-/// fan; a 5-seater's in the boot), beside the car what the pack feeds besides
-/// the motors, and the seats: dark, as the picture has them, while empty or
+/// fan; a 5-seater's in the boot), and the seats: dark, as the picture has them, while empty or
 /// not yet heard, green once the belt is buckled, red while someone sits in
 /// it unbuckled (that row's figures then step aside). Not over Bluetooth,
 /// which has none of it; before the stream the saved pressures on the car.
 class _Cabin extends StatelessWidget {
-  const _Cabin({required this.obd, this.figures = 1, this.carHeight});
+  const _Cabin({required this.obd, this.carHeight});
 
   final Panda obd;
 
-  /// The car's own height, for a basic card: drawn to it, its figures
-  /// staying their own size ([figures]), its paddings trimmed (its top
-  /// [fillInset] under the widget's). Otherwise its own size, which the full
-  /// layout's column scales, figures and all.
+  /// The car's own height, for a basic card: drawn to it, its figures their
+  /// own size (a little over the full layout's), its paddings trimmed (its
+  /// top [fillInset] under the widget's). Otherwise its own size, which the
+  /// full layout's column scales, figures and all.
   final double? carHeight;
 
-  /// Where a [carHeight] car's picture starts, under the widget's top.
-  static double fillInset(BuildContext context) => 2 + MediaQuery.textScalerOf(context).scale(2);
+  static const _fillFrame = 2.0, _fillTop = 2.0, _fillFigures = 1.38;
 
-  /// The tyre and seat figures' size, over the full layout's (basic: bigger).
-  final double figures;
+  /// Where a [carHeight] car's picture starts, under the widget's top.
+  static double fillInset(BuildContext context) => _fillFrame + MediaQuery.textScalerOf(context).scale(_fillTop);
 
   @override
   Widget build(BuildContext context) {
@@ -1641,19 +1630,18 @@ class _Cabin extends StatelessWidget {
       'D': o.beltDriver, 'P': o.beltPass, '2L': o.belt2L, '2C': o.belt2C,
       '2R': o.belt2R, '3L': o.belt3L, '3R': o.belt3R,
     };
-    // As tall as the column allows: the rows' figures sit on the seats.
     final dir = _Car.dir(o.thirdRow);
     final fill = carHeight != null;
     // Room above it for the beams over the lamps' row, behind it for the
     // brake glow, and round it for the unbuckled seat's frame.
-    final padTop = scale(fill ? 2 : 4), padBottom = scale(fill ? 4 : 6), frame = fill ? 2.0 : 4.0;
+    final padTop = scale(fill ? _fillTop : 4), padBottom = scale(fill ? 4 : 6), frame = fill ? _fillFrame : 4.0;
     final carH = carHeight ?? scale(236);
     final carW = carH * _Car.aspect; // the image's own shape
     // A tyre's psi on the body over its wheel: between the outline and the
     // seats, as far in from each side (the mirrors make the image wider than
     // the body, the left more than the right).
     // Bigger figures widen the box about its centre and shrink to it.
-    final f = figures, tyreOut = carW * _Car.tyreW * (f - 1) / 2;
+    final f = fill ? _fillFigures : 1.0, tyreOut = carW * _Car.tyreW * (f - 1) / 2;
     Widget tyre(double? bar, double at, bool left) => Positioned(
           left: left ? carW * _Car.tyreL - tyreOut : null,
           right: left ? null : carW * _Car.tyreR - tyreOut,
@@ -1693,7 +1681,7 @@ class _Cabin extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text('${c.round()}°',
+                  Text(_deg(c),
                       style: TextStyle(fontSize: temp, height: 1.1, fontWeight: FontWeight.w600, color: Colors.white)),
                   if (fan != null)
                     Row(mainAxisSize: MainAxisSize.min, children: [
@@ -1706,6 +1694,20 @@ class _Cabin extends StatelessWidget {
             ),
           ),
         );
+    // The beams and paths under the car, the rest over it.
+    Widget lights({bool beams = false}) => CustomPaint(
+        painter: _CarLights(
+            drl: o.drl == true,
+            low: o.lowBeam == true,
+            high: o.highBeam == true,
+            brake: o.braking,
+            left: o.indL && o.blinkLit,
+            right: o.indR && o.blinkLit,
+            // The paths only under it: the layer over it does not repaint as the wheel turns.
+            steerDeg: beams ? o.steerDeg : null,
+            steerLines: beams && o.steerLines,
+            reverse: beams && o.gear == 'R',
+            beams: beams));
     final car = SizedBox(
       width: carW,
       height: carH,
@@ -1713,19 +1715,7 @@ class _Cabin extends StatelessWidget {
         // The picture's seats are dark: an empty one, or one not yet heard,
         // shows as it is. The masks are the white-seat picture's seats,
         // multiplied by the colour, shading and all. The beams under it.
-        if (o.live)
-          CustomPaint(
-              painter: _CarLights(
-                  drl: o.drl == true,
-                  low: o.lowBeam == true,
-                  high: o.highBeam == true,
-                  brake: o.braking,
-                  left: o.indL && o.blinkLit,
-                  right: o.indR && o.blinkLit,
-                  steerDeg: o.steerDeg,
-                  steerLines: o.steerLines,
-                  reverse: o.gear == 'R',
-                  beams: true)),
+        if (o.live) lights(beams: true),
         Image.asset('$dir/car.png', fit: BoxFit.fill),
         if (live)
           for (final s in _Car.seats(o.thirdRow))
@@ -1733,15 +1723,7 @@ class _Cabin extends StatelessWidget {
               Image.asset('$dir/seat_$s.png',
                   fit: BoxFit.fill, colorBlendMode: BlendMode.modulate, color: unbuckled[s]! ? kAlert : kRegen),
         // Its lights, past its ends into the room the padding leaves.
-        if (o.live)
-          CustomPaint(
-              painter: _CarLights(
-                  drl: o.drl == true,
-                  low: o.lowBeam == true,
-                  high: o.highBeam == true,
-                  brake: o.braking,
-                  left: o.indL && o.blinkLit,
-                  right: o.indR && o.blinkLit)),
+        if (o.live) lights(),
         tyre(o.tpFL, _Car.axles[0], true),
         tyre(o.tpFR, _Car.axles[0], false),
         tyre(o.tpRL, _Car.axles[1], true),
@@ -1776,23 +1758,23 @@ class _Cabin extends StatelessWidget {
   }
 }
 
-/// Basic layout's card of what the pack feeds besides the motors.
+/// What the pack feeds besides the motors: the climate, and ([minor]) the
+/// 12 V side and the rest.
 class _Draws extends StatelessWidget {
-  const _Draws({required this.obd, this.minor = true, this.size = 1});
+  const _Draws({required this.obd, this.minor = true});
 
   final Panda obd;
-  final bool minor; // 12 V and the rest (a switch in the settings hides them)
-  final double size; // [_statRow]'s
+  final bool minor; // 12 V and the rest (the full layout hides them unless switched on)
 
   @override
   Widget build(BuildContext context) {
     final o = obd, live = o.wifiLive;
     String kw(double? v) => !live || v == null ? '—' : '${v.toStringAsFixed(1)} kW';
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _statRow(context, 'CLIMATE', kw(o.climateKw), size: size),
+      _statRow(context, 'CLIMATE', kw(o.climateKw)),
       if (minor) ...[
-        _statRow(context, '12 V', kw(o.lvKw), size: size),
-        _statRow(context, 'OTHER', kw(o.otherKw), size: size),
+        _statRow(context, '12 V', kw(o.lvKw)),
+        _statRow(context, 'OTHER', kw(o.otherKw)),
       ],
     ]);
   }
@@ -1801,18 +1783,16 @@ class _Draws extends StatelessWidget {
 /// While charging: to what % and by when, as the nav puts a route.
 /// WiFi only.
 class _Charge extends StatelessWidget {
-  const _Charge({required this.obd, this.oneLine = false, this.size = 1});
+  const _Charge({required this.obd, this.oneLine = false});
 
   final Panda obd;
   final bool oneLine; // the compact dash: one row under the ring
-  final double size; // over the full layout's, as [_statRow]'s
 
   @override
   Widget build(BuildContext context) {
     final o = obd;
     if (!o.wifiLive || !o.charging) return const SizedBox.shrink();
-    final big = TextStyle(
-        fontSize: 18 * size, color: Colors.white, fontFeatures: const [FontFeature.tabularFigures()]);
+    const big = TextStyle(fontSize: 18, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]);
     final pct = o.chargeLimitPct, m = o.chargeMinutes;
     final to = pct == null ? null : 'to $pct %';
     final when = m == null
@@ -1826,9 +1806,8 @@ class _Charge extends StatelessWidget {
           child: Text([?to, ?when].join('   '), style: big));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('CHARGE',
-          style: TextStyle(fontSize: 12 * size, letterSpacing: 1.5 * size, color: Colors.white70)),
-      SizedBox(height: 2 * size),
+      const Text('CHARGE', style: TextStyle(fontSize: 12, letterSpacing: 1.5, color: Colors.white70)),
+      const SizedBox(height: 2),
       if (to != null) Text(to, style: big),
       if (when != null) FittedBox(fit: BoxFit.scaleDown, child: Text(when, style: big)),
     ]);

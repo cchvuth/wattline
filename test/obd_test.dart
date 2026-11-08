@@ -696,7 +696,7 @@ void main() {
     final p = Panda()
       // 0x129: raw 8462 at 16|14 = 846.2 - 819.2 = 27.0 deg.
       ..onFrame(0x129, 1, [0, 0, 0x0E, 0x21, 0, 0, 0, 0]);
-    expect(p.traceLine(), contains('sccm=27.0'));
+    expect(p.traceLine(), contains('steer deg=-27.0'));
     expect(Panda.alwaysOn, contains(0x129));
     expect(p.steerDeg, -27.0);
   });
@@ -723,8 +723,9 @@ void main() {
     expect(p.traceLine(), contains('brake Nm=120'));
     p.onFrame(0x185, 1, [0, 0, 0, 0, 0, 0, 0x04, 0x8A]);
     expect(p.brakePct, 0);
-    // Past full: the ring's foot at its widest, no further. 0xFFF x2 each.
-    p.onFrame(0x185, 1, [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0]);
+    // Past full: the ring's foot at its widest, no further. 0xFFE x2 each
+    // (all ones is not available).
+    p.onFrame(0x185, 1, [0xFE, 0xEF, 0xFF, 0xFE, 0xEF, 0xFF, 0, 0]);
     expect(p.brakePct, 100);
     expect(Panda.alwaysOn, contains(0x185));
     expect(kSubscribeIds, isNot(contains(0x38D)));
@@ -1033,7 +1034,37 @@ void main() {
     final skip = basicSkip(0, 3);
     expect(skip, containsAll([0x129, 0x101, 0x3C2, 0x238]));
     expect(skip.intersection(kBasicBase), isEmpty);
+    expect(skip, isNot(contains(0x321))); // washer low shows under the speed whatever the cards
     expect(skip, isNot(contains(0x33A))); // the battery
     expect(skip, isNot(contains(0x102))); // the doors' buttons
+  });
+
+  // All ones is "not available" (a module booting): no full brake arc (and no
+  // brake frozen on: none of the wheels' figures stays), no full-lock lines
+  // (nor the last angle frozen: no lines).
+  test('brake torque and steering ignore their not-available value', () {
+    final p = Panda()
+      ..onFrame(0x185, 1, [0x14, 0x40, 0x01, 0x0A, 0xA0, 0x00, 0x54, 0xD9]) // 120 Nm in all
+      ..onFrame(0x129, 1, [0, 0, 0x0E, 0x21, 0, 0, 0, 0]); // 27.0
+    expect(p.brakePct, greaterThan(0));
+    p
+      ..onFrame(0x185, 1, [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0, 0])
+      ..onFrame(0x129, 1, [0, 0, 0xFF, 0x3F, 0, 0, 0, 0]);
+    expect(p.brakePct, isNull);
+    expect((p.steerDeg, p.steerLines), (null, false));
+  });
+
+  // A rear-motor car has no front motor, whatever its bus says: the ring's
+  // only motor arc keeps the whole of the power.
+  test('a rear-motor car takes no front motor frame', () {
+    final p = Panda()
+      ..rwd = true
+      ..onFrame(0x2E5, 1, [0, 0, 0, 0, 0xD0, 0x48, 0]); // 18 kW, were it read
+    expect(p.frontKw, isNull);
+    // Picked as rear-motor mid-drive: the last front reading goes too.
+    final q = Panda()..onFrame(0x2E5, 1, [0, 0, 0, 0, 0xD0, 0x48, 0]);
+    expect(q.frontKw, 18);
+    q.rwd = true;
+    expect(q.frontKw, isNull);
   });
 }

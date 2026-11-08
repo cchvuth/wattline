@@ -118,6 +118,37 @@ void main() {
     p.skip = const {};
     await _wait(0.3);
     expect(c.filter, containsAll([0x129, 0x101]));
+    // Its add lost, and another card swiped in straight after: said again
+    // all the same, so the streamed ids still come back.
+    var lost = 0;
+    c.drop = (b) => b[0] == 0x0f && b.length == 4 && (b[2] << 8 | b[3]) == 0x129 && lost++ == 0;
+    p.skip = {0x129, 0x101};
+    await _wait(1);
+    expect(c.filter.intersection({0x129, 0x101}), isEmpty);
+    p.skip = {0x101};
+    p.skip = const {};
+    await _wait(2.5);
+    expect(lost, 1);
+    expect(c.filter, containsAll([0x129, 0x101]));
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
+  // With sparse polling off too, a lost remove of a skipped id is sent again.
+  test('sparse off: a skipped id whose remove was lost goes after all', () async {
+    final c = _Commander();
+    final p = Panda()..sparse = false;
+    await p.connect('127.0.0.1', await c.start());
+    addTearDown(() async {
+      await p.disconnect();
+      c.stop();
+    });
+    await _wait(3.2);
+    expect(c.filter, contains(0x129));
+    var lost = 0;
+    c.drop = (b) => b[0] == 0x0e && lost++ == 0;
+    p.skip = {0x129};
+    await _wait(3);
+    expect(lost, greaterThan(1));
+    expect(c.filter, isNot(contains(0x129)));
   }, timeout: const Timeout(Duration(seconds: 30)));
 
   test('a new stream reads everything before the wheel turns', () async {

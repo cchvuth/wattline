@@ -35,9 +35,7 @@ Update? pickUpdate(String json, String running) {
         for (final a in (r['assets'] as List? ?? const []))
           if (a['name'] == name) a['browser_download_url'] as String,
       ].firstOrNull;
-  // The names before the rename too, for a release made before it.
-  final arm64 = url('Wattline-Android.apk') ?? url('Tesla-Dash-Android.apk');
-  final any = url('Wattline-Android-older-phones.apk') ?? url('Tesla-Dash-Android-older-phones.apk');
+  final arm64 = url('Wattline-Android.apk'), any = url('Wattline-Android-older-phones.apk');
   if (arm64 == null || any == null) return null;
   return (version: tag.replaceFirst('v', ''), arm64: arm64, any: any);
 }
@@ -46,20 +44,37 @@ Future<Update?> checkUpdate(String running) async {
   try {
     final json = await _net.invokeMethod<String>('latestRelease');
     return json == null ? null : pickUpdate(json, running);
-  } on Exception {
-    return null; // no native side (tests, iOS), or GitHub said something odd
+  } catch (_) {
+    return null; // no native side (tests, iOS), or GitHub said something odd (a bad cast throws an Error)
   }
 }
 
 /// Whether Android lets this app install updates (allowed once, in Settings).
-Future<bool> canInstallUpdates() async => await _net.invokeMethod<bool>('canInstall') ?? false;
+Future<bool> canInstallUpdates() async {
+  try {
+    return await _net.invokeMethod<bool>('canInstall') ?? false;
+  } on PlatformException {
+    return false;
+  }
+}
 
 /// Opens Android's "install unknown apps" switch for this app.
-Future<void> allowInstallUpdates() => _net.invokeMethod('allowInstalls');
+Future<void> allowInstallUpdates() async {
+  try {
+    await _net.invokeMethod('allowInstalls');
+  } on PlatformException {
+    // No such screen on this phone: the snackbar has said where to look.
+  }
+}
 
 /// Downloads and starts the install: null once Android's installer has it,
 /// or why not.
 Future<String?> installUpdate(Update u) async {
-  final r = await _net.invokeMethod<String>('installUpdate', {'arm64': u.arm64, 'any': u.any});
-  return r == 'started' ? null : r;
+  try {
+    final r = await _net.invokeMethod<String>('installUpdate', {'arm64': u.arm64, 'any': u.any});
+    return r == 'started' ? null : r;
+  } catch (e) {
+    // Any error, or the dash would wait on an install that never started.
+    return e is PlatformException ? e.message ?? e.code : '$e';
+  }
 }

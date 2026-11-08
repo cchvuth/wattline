@@ -502,6 +502,14 @@ void main() {
     final top = t.getRect(dial).top, bottom = t.getRect(find.text('DEGRADATION')).bottom;
     expect(find.text('CHARGE'), findsOneWidget);
     expect((top - ring.top) - (ring.bottom - bottom), closeTo(0, 6));
+    // Washer low shows charging too: its drop beside the charge cue.
+    final o = (t.widget<DashPage>(find.byType(DashPage)).demo!)
+      ..washerLow = true
+      ..notifyListeners();
+    await t.pump();
+    expect(find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyph.washer), findsOneWidget);
+    expect(find.textContaining('MAX'), findsOneWidget);
+    o.washerLow = false;
     await t.pumpWidget(const SizedBox());
   });
 
@@ -528,7 +536,7 @@ void main() {
             .decoration as BoxDecoration)
         .color!;
     double fade(String words) =>
-        t.widget<FadeTransition>(find.descendant(of: find.byTooltip(words), matching: find.byType(FadeTransition))).opacity.value;
+        t.widget<Opacity>(find.descendant(of: find.byTooltip(words), matching: find.byType(Opacity))).opacity;
     final ring = t.getRect(find.byType(RingGauge)), car = t.getRect(find.image(const AssetImage('assets/car/car.png')));
     final icon = t.getCenter(find.byTooltip('AP READY')), out = t.getRect(find.text('5°')); // 4.5, in whole degrees
     expect(icon.dx, greaterThan(ring.center.dx + ring.width * 0.3)); // top right
@@ -564,6 +572,7 @@ void main() {
     expect(find.text('WASHER LOW'), findsNothing);
     expect(find.text('SET 90'), findsOneWidget);
     expect(drop(), findsOneWidget);
+    expect(disc('TACC'), const Color(0xFF0048FF)); // ready, cruise holding: TACC
     o
       ..washerLow = false
       ..cruiseSet = null
@@ -585,11 +594,17 @@ void main() {
       ..handsOn = 3
       ..notifyListeners();
     await t.pump();
-    await t.pump(const Duration(milliseconds: 200));
+    await t.pump(const Duration(milliseconds: 300)); // past the first blink
     expect(disc('HOLD WHEEL'), kWarn);
     expect(t.widget<GlyphIcon>(find.descendant(of: find.byTooltip('HOLD WHEEL'), matching: find.byType(GlyphIcon))).color,
         Colors.black);
     expect(fade('HOLD WHEEL'), lessThan(0.9)); // flashing
+    // Ignored, the car chimes: red, still flashing.
+    o
+      ..handsOn = 4
+      ..notifyListeners();
+    await t.pump();
+    expect(disc('HOLD WHEEL'), kAlert);
     o
       ..handsOn = 7
       ..notifyListeners();

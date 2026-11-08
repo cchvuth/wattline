@@ -64,7 +64,9 @@ String diagReport(Panda o, Commander? bt) {
           'nav ${bt?.navMinutes} min ${bt?.navMiles} mi '
           '${bt?.navArrivePct} % ${bt?.navDest}')
       ..writeln()
-      ..writeln('subscribed ids: ${kSubscribeIds.map(_idHex).join(' ')}')
+      ..writeln('subscribed ids: ${kSubscribeIds.where((id) => !o.skip.contains(id)).map(_idHex).join(' ')}')
+      // The basic layout's hidden cards: their values below are as last seen.
+      ..writeln('not asked for (hidden cards): ${o.skip.map(_idHex).join(' ')}')
       ..writeln()
       ..writeln('id     bus  hz     data');
     for (final id in ids) {
