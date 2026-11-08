@@ -170,6 +170,7 @@ class _DashPageState extends State<DashPage> {
       if (!mounted) return;
     }
     _connect();
+    _linksStarted = true;
     _bt.connect();
     _startTrace();
     _checkUpdate();
@@ -320,7 +321,7 @@ class _DashPageState extends State<DashPage> {
         );
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => StatefulBuilder(builder: (ctx, redraw) => AlertDialog(
         scrollable: true,
         title: const Text('Turn on ScanMyTesla'),
         content: SizedBox(
@@ -330,15 +331,67 @@ class _DashPageState extends State<DashPage> {
             step('1. In the S3XY app, open Commander, then Scan My Tesla.', 'assets/smt/step1.jpg',
                 // An iPhone joins in Settings; Android's dash joins by itself.
                 defaultTargetPlatform == TargetPlatform.iOS
-                    ? '3. In Settings, join the $kDefaultSsid WiFi (password $kDefaultPassword); the dash finds it there.'
-                    : '3. That\'s all: the dash joins the $kDefaultSsid WiFi by itself. Allow it if the phone asks.'),
+                    ? '3. In Settings, join the $_ssid WiFi (password $_password); the dash finds it there.'
+                    : '3. That\'s all: the dash joins the $_ssid WiFi by itself. Allow it if the phone asks.'),
             const SizedBox(width: 20),
             step('2. Turn on ScanMyTesla support and ScanMyTesla Always ON.', 'assets/smt/step2.jpg'),
           ]),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done'))],
+        actions: [
+          // Not the standard name and password: they go in before the first try.
+          TextButton(
+            onPressed: () async {
+              await _wifiLoginDialog();
+              redraw(() {});
+            },
+            child: const Text('Changed the WiFi name or password?'),
+          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Done')),
+        ],
+      )),
+    );
+  }
+
+  /// The links have been started: a changed WiFi name or password then
+  /// reconnects at once, not at the end of the first-launch pages.
+  bool _linksStarted = false;
+
+  /// The Commander's WiFi name and password, for a Commander whose were
+  /// changed in the S3XY app: asked inside the setup pages, before the first
+  /// connection, where a wrong password would otherwise only fail.
+  Future<void> _wifiLoginDialog() async {
+    final ssid = TextEditingController(text: _ssid);
+    final password = TextEditingController(text: _password);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('The Commander\'s WiFi'),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('As set in the S3XY app. Its standard name is $kDefaultSsid, '
+              'its standard password $kDefaultPassword.'),
+          TextField(controller: ssid, decoration: const InputDecoration(labelText: 'WiFi name')),
+          TextField(controller: password, decoration: const InputDecoration(labelText: 'WiFi password')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save')),
+        ],
       ),
     );
+    final name = ssid.text.trim(), pass = password.text;
+    // After the dialog's exit animation, which still builds its fields.
+    Future<void>.delayed(const Duration(milliseconds: 500), () {
+      ssid.dispose();
+      password.dispose();
+    });
+    if (ok != true) return;
+    _ssid = name.isEmpty ? kDefaultSsid : name;
+    _password = pass;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('ssid', _ssid);
+    await prefs.setString('password', _password);
+    if (_linksStarted) _connect(now: true);
   }
 
   /// A newer release on GitHub, once looked for at start (Android only).
@@ -786,7 +839,7 @@ class _DashPageState extends State<DashPage> {
         ],
       )),
     );
-    scroll.dispose();
+    Future<void>.delayed(const Duration(milliseconds: 500), scroll.dispose); // after the exit animation
     if (!mounted) return;
     if (action == 'diag') {
       await Navigator.push(

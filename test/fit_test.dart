@@ -264,6 +264,33 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  // A Commander whose WiFi name or password was changed in the S3XY app: the
+  // setup page takes them before the first connection, and keeps them.
+  testWidgets('the setup page takes a changed WiFi name and password', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: Panda(), bt: Commander())));
+    await t.tap(find.byIcon(Icons.wifi_off));
+    await _frames(t);
+    await t.ensureVisible(find.text('Setup steps'));
+    await t.tap(find.text('Setup steps'));
+    await _frames(t);
+    expect(find.textContaining('the dash joins the S3XY_OBD WiFi by itself'), findsOneWidget);
+    await t.tap(find.text('Changed the WiFi name or password?'));
+    await _frames(t);
+    final fields = find.descendant(
+        of: find.widgetWithText(AlertDialog, 'The Commander\'s WiFi'), matching: find.byType(TextField));
+    await t.enterText(fields.at(0), 'MyCommander');
+    await t.enterText(fields.at(1), 'hunter22');
+    await t.tap(find.text('Save'));
+    await _frames(t);
+    // The page now names it, and it is kept for the first connection.
+    expect(find.textContaining('the dash joins the MyCommander WiFi by itself'), findsOneWidget);
+    final prefs = await SharedPreferences.getInstance();
+    expect((prefs.getString('ssid'), prefs.getString('password')), ('MyCommander', 'hunter22'));
+    await t.pump(const Duration(seconds: 1)); // the fields' delayed disposal
+    await t.pumpWidget(const SizedBox());
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   // iPhone joins the network in Settings: there is no look to time.
   testWidgets('no WiFi scan time slider on iPhone', (t) async {
     SharedPreferences.setMockInitialValues({});

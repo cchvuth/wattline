@@ -730,7 +730,9 @@ class Panda extends ChangeNotifier {
     _set(WifiLink.joining, 'joining ${c.ssid}…${Platform.isAndroid ? ' approve the wifi dialog if asked' : ''}');
     if (!await _bindWifi(c.ssid, c.password)) {
       if (gen != _gen) return;
-      _scheduleRetry('no ${c.ssid} yet — is the Commander on?');
+      // The network was in range, so a failed join is most often a wrong
+      // password (or the phone's approval declined): say where to change it.
+      _scheduleRetry('could not join ${c.ssid}: wrong password? Change it in the settings');
       return;
     }
     if (gen != _gen) return; // disconnected or restarted while binding

@@ -119,6 +119,10 @@ the scroll-wheel approval only the first time, or when you tap.
    - Android joins `S3XY_OBD` itself (approve the system dialog once) and
      keeps mobile data for everything else.
    - On iPhone, join `S3XY_OBD` in Settings › Wi-Fi.
+   - Changed the Commander's WiFi name or password in the S3XY app? Enter
+     them with **Changed the WiFi name or password?** on the first-launch
+     page (or later in the settings), before the first connection. A join
+     that fails says so: "could not join ... wrong password?".
    - The WiFi and Bluetooth icons open the settings: the car, the network,
      host and port, the Android scan time and the Bluetooth timings.
 3. Close the S3XY app: the Commander takes one Bluetooth client at a time.
