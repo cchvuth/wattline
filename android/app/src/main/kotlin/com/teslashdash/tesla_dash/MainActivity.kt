@@ -209,7 +209,7 @@ class MainActivity : FlutterActivity() {
                     )
                     "latestRelease" -> Thread {
                         val json = try {
-                            fetch("https://api.github.com/repos/cchvuth/tesla-dash/releases/latest")
+                            fetch("https://api.github.com/repos/cchvuth/wattline/releases/latest")
                                 .inputStream.bufferedReader().readText()
                         } catch (e: Exception) {
                             null
