@@ -1,4 +1,4 @@
-package com.teslashdash.tesla_dash
+package io.github.cchvuth.wattline
 
 import android.Manifest
 import android.net.ConnectivityManager
@@ -34,7 +34,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-private const val INSTALL_STATUS = "com.teslashdash.tesla_dash.INSTALL_STATUS"
+private const val INSTALL_STATUS = "io.github.cchvuth.wattline.INSTALL_STATUS"
 
 class MainActivity : FlutterActivity() {
 

@@ -186,7 +186,7 @@ class _DashPageState extends State<DashPage> {
 
   /// A line a second to trace.log in the app's external files folder, to read
   /// a drive afterwards over adb:
-  /// adb pull /sdcard/Android/data/com.teslashdash.tesla_dash/files/trace.log
+  /// adb pull /sdcard/Android/data/io.github.cchvuth.wattline/files/trace.log
   /// Rolls to trace.log.1 past 50 MB, so the two stay under 100 MB (about 9
   /// hours of driving each, at 5.4 MB an hour).
   File? _traceFile;
