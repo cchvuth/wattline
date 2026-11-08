@@ -364,6 +364,7 @@ void main() {
     expect(find.text('IMBALANCE'), findsOneWidget);
     expect(find.text('Central Market'), findsNothing);
     final basicPct = t.getRect(find.text('52%', findRichText: true)).height;
+    final basicRow = t.getRect(find.text('DEGRADATION')).height;
     expect(o.skip, basicSkip(0, 3)); // only what the ring and these two cards read
     // The assist state at the ring's top right, whichever cards show.
     final ring = t.getRect(find.byType(RingGauge));
@@ -396,10 +397,12 @@ void main() {
     expect(t.getRect(find.image(const AssetImage('assets/car/car.png'))).height, greaterThan(255));
     expect(t.getRect(find.text('38').first).height, greaterThan(19));
     await shot('basic-3');
-    // The battery dial as big on screen as in the full layout.
+    // The battery dial and the figures' rows as big on screen as in the full
+    // layout: not scaled up with the rest of the card.
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
     await t.pump(const Duration(milliseconds: 300));
     expect(t.getRect(find.text('52%', findRichText: true)).height, closeTo(basicPct, 0.5));
+    expect(t.getRect(find.text('DEGRADATION')).height, closeTo(basicRow, 0.5));
     await t.pumpWidget(const SizedBox());
   });
 

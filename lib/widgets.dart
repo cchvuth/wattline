@@ -1149,29 +1149,35 @@ class _GPainter extends CustomPainter {
 /// group, and how far full-pack energy has fallen from the BMS's figure for
 /// it new.
 /// A label and its value, the labels one width so the values line up.
-Widget _statRow(BuildContext context, String label, String value, {Color color = Colors.white}) =>
+/// [size]: over the full layout's (a basic card passes the inverse of its
+/// scale, so its rows come out the full layout's size on screen).
+Widget _statRow(BuildContext context, String label, String value, {Color color = Colors.white, double size = 1}) =>
     Row(mainAxisSize: MainAxisSize.min, children: [
       SizedBox(
-        width: MediaQuery.textScalerOf(context).scale(104), // aligns the values
+        width: MediaQuery.textScalerOf(context).scale(104) * size, // aligns the values
         child: Text(label,
-            maxLines: 1, softWrap: false, style: const TextStyle(fontSize: 12, letterSpacing: 0.8, color: Colors.white70)),
+            maxLines: 1,
+            softWrap: false,
+            style: TextStyle(fontSize: 12 * size, letterSpacing: 0.8 * size, color: Colors.white70)),
       ),
-      Text(value, style: TextStyle(fontSize: 16, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
+      Text(value, style: TextStyle(fontSize: 16 * size, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
     ]);
 
 class _Pack extends StatelessWidget {
-  const _Pack({required this.obd, this.outside = true, this.pack = true, this.minor = true});
+  const _Pack({required this.obd, this.outside = true, this.pack = true, this.minor = true, this.size = 1});
 
   final Panda obd;
   final bool outside, pack; // the air outside (and washer), the pack's health
   final bool minor; // the cell imbalance (a switch in the settings hides it)
+  final double size; // [_statRow]'s
 
   @override
   Widget build(BuildContext context) {
     final o = obd, mv = o.imbalanceMv;
     final kwh = o.packKwh, isNew = o.packNewKwh;
     final out = o.outsideC;
-    Widget row(String label, String value, {Color color = Colors.white}) => _statRow(context, label, value, color: color);
+    Widget row(String label, String value, {Color color = Colors.white}) =>
+        _statRow(context, label, value, color: color, size: size);
     // Shrinks rather than overflows when a large font meets a wide ring.
     return FittedBox(fit: BoxFit.scaleDown, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (outside) ...[
@@ -1703,20 +1709,21 @@ class _Cabin extends StatelessWidget {
 
 /// Basic layout's card of what the pack feeds besides the motors.
 class _Draws extends StatelessWidget {
-  const _Draws({required this.obd, this.minor = true});
+  const _Draws({required this.obd, this.minor = true, this.size = 1});
 
   final Panda obd;
   final bool minor; // 12 V and the rest (a switch in the settings hides them)
+  final double size; // [_statRow]'s
 
   @override
   Widget build(BuildContext context) {
     final o = obd, live = o.wifiLive;
     String kw(double? v) => !live || v == null ? '—' : '${v.toStringAsFixed(1)} kW';
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _statRow(context, 'CLIMATE', kw(o.climateKw)),
+      _statRow(context, 'CLIMATE', kw(o.climateKw), size: size),
       if (minor) ...[
-        _statRow(context, '12 V', kw(o.lvKw)),
-        _statRow(context, 'OTHER', kw(o.otherKw)),
+        _statRow(context, '12 V', kw(o.lvKw), size: size),
+        _statRow(context, 'OTHER', kw(o.otherKw), size: size),
       ],
     ]);
   }
@@ -1725,17 +1732,18 @@ class _Draws extends StatelessWidget {
 /// While charging: to what % and by when, as the nav puts a route.
 /// WiFi only.
 class _Charge extends StatelessWidget {
-  const _Charge({required this.obd, this.oneLine = false});
+  const _Charge({required this.obd, this.oneLine = false, this.size = 1});
 
   final Panda obd;
   final bool oneLine; // the compact dash: one row under the ring
+  final double size; // over the full layout's, as [_statRow]'s
 
   @override
   Widget build(BuildContext context) {
     final o = obd;
     if (!o.wifiLive || !o.charging) return const SizedBox.shrink();
-    const big = TextStyle(
-        fontSize: 18, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]);
+    final big = TextStyle(
+        fontSize: 18 * size, color: Colors.white, fontFeatures: const [FontFeature.tabularFigures()]);
     final pct = o.chargeLimitPct, m = o.chargeMinutes;
     final to = pct == null ? null : 'to $pct %';
     final when = m == null
@@ -1749,9 +1757,9 @@ class _Charge extends StatelessWidget {
           child: Text([?to, ?when].join('   '), style: big));
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('CHARGE',
-          style: TextStyle(fontSize: 12, letterSpacing: 1.5, color: Colors.white70)),
-      const SizedBox(height: 2),
+      Text('CHARGE',
+          style: TextStyle(fontSize: 12 * size, letterSpacing: 1.5 * size, color: Colors.white70)),
+      SizedBox(height: 2 * size),
       if (to != null) Text(to, style: big),
       if (when != null) FittedBox(fit: BoxFit.scaleDown, child: Text(when, style: big)),
     ]);

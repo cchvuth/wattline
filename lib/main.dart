@@ -1013,6 +1013,9 @@ class _DashPageState extends State<DashPage> {
   /// the route. Both stacks hold every card, so either side shows any; each
   /// side's card is kept. The assist state is at the ring's top right.
   Widget _basicRow(Panda o) {
+    // The figures' rows (label and value) as on the full layout's screen,
+    // not scaled up with the rest: next to the ring they read as notes.
+    const small = 1 / _CardsState._scale;
     List<Widget> cards() => [
           Column(children: [
             // The dial as big on screen as in the full layout: next to the
@@ -1022,8 +1025,8 @@ class _DashPageState extends State<DashPage> {
             // The draws and the pack's health in one column, the values lined
             // up; all of them here, whatever the full layout's switch says.
             Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
-              _Pack(obd: o, outside: false),
+              if (o.wifiLive && o.charging) _Charge(obd: o, size: small) else _Draws(obd: o, size: small),
+              _Pack(obd: o, outside: false, size: small),
             ]),
           ]),
           Column(children: [
@@ -1034,7 +1037,7 @@ class _DashPageState extends State<DashPage> {
             Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
             const SizedBox(height: 6),
             // The air outside.
-            _Pack(obd: o, pack: false),
+            _Pack(obd: o, pack: false, size: small),
           ]),
           // The car as big as the card allows, under a little room for its
           // beams (drawn shorter here, so the low beam shows whole), its
