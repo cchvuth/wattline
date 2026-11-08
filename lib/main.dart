@@ -13,6 +13,7 @@ import 'gauge.dart';
 import 'glyphs.dart';
 import 'panda.dart';
 import 'diag.dart';
+import 'update.dart';
 
 part 'widgets.dart';
 
@@ -47,7 +48,7 @@ class DashApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'Tesla Dash',
+        title: 'Wattline',
         debugShowCheckedModeBanner: false,
         theme: kTheme,
         home: const DashPage(),
@@ -149,6 +150,8 @@ class _DashPageState extends State<DashPage> {
     _life = AppLifecycleListener(onResume: () {
       _obd.kick();
       _bt.kick();
+      // Back from allowing installs: the update carries on.
+      if (_installOnReturn) canInstallUpdates().then((ok) => ok ? _installUpdate() : null);
     });
     // Bluetooth first, then the WiFi stream, took the Commander down; the
     // other way round held. So each new stream waits for Bluetooth to step
@@ -169,6 +172,7 @@ class _DashPageState extends State<DashPage> {
     _connect();
     _bt.connect();
     _startTrace();
+    _checkUpdate();
   }
 
   /// Why Bluetooth is not to start a link now, or null ([Commander.waitFor]).
@@ -337,6 +341,64 @@ class _DashPageState extends State<DashPage> {
     );
   }
 
+  /// A newer release on GitHub, once looked for at start (Android only).
+  Update? _update;
+  bool _updateOffered = false;
+
+  Future<void> _checkUpdate() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return;
+    _obd.onUpdateFailed =
+        (why) => _say(why.contains('ABORTED') ? 'Update cancelled' : 'Update not installed: $why');
+    await loadBuild();
+    final u = await checkUpdate(diagBuild);
+    if (u == null || !mounted) return;
+    setState(() => _update = u);
+    _obd.addListener(_offerUpdate);
+    _offerUpdate();
+  }
+
+  /// Offers the update once, never on the move: at once when parked or with
+  /// no stream, else at the next stop in P. The settings keep the button.
+  void _offerUpdate() {
+    final u = _update;
+    if (u == null || _updateOffered || !mounted || (_obd.live && !_obd.parked)) return;
+    _updateOffered = true;
+    _obd.removeListener(_offerUpdate);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(
+          duration: const Duration(seconds: 12),
+          content: Text('Wattline ${u.version} is available'),
+          action: SnackBarAction(label: 'UPDATE', onPressed: _installUpdate)));
+  }
+
+  /// Allowed to install apps first: going to Settings mid-install cancels
+  /// Android's install, so the permission comes before the download, and
+  /// the update carries on when the app is back in front ([_life]).
+  Future<void> _installUpdate() async {
+    final u = _update;
+    if (u == null) return;
+    _installOnReturn = false;
+    if (!await canInstallUpdates()) {
+      _installOnReturn = true;
+      _say('Allow Wattline to install updates, then come back here');
+      await allowInstallUpdates();
+      return;
+    }
+    _say('Downloading Wattline ${u.version}…');
+    final err = await installUpdate(u);
+    if (err != null) _say('Update not installed: $err');
+  }
+
+  bool _installOnReturn = false;
+
+  void _say(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(text)));
+  }
+
   /// Both setup pages: the WiFi stream's, then the Bluetooth link's.
   Future<void> _setupHelp() async {
     await _smtHelp();
@@ -453,7 +515,7 @@ class _DashPageState extends State<DashPage> {
     // The first time, Android asks to let the app hold the split landscape.
     final say = switch (r) {
       'opened' => null,
-      'asked' => 'Allow Tesla Dash to modify system settings, so split screen '
+      'asked' => 'Allow Wattline to modify system settings, so split screen '
           'stays landscape, then tap the map again',
       _ => 'Google Maps is not installed',
     };
@@ -504,6 +566,7 @@ class _DashPageState extends State<DashPage> {
   }
 
   Future<void> _settings() async {
+    final scroll = ScrollController();
     final host = TextEditingController(text: _host);
     final port = TextEditingController(text: '$_port');
     final ssid = TextEditingController(text: _ssid);
@@ -529,11 +592,27 @@ class _DashPageState extends State<DashPage> {
     final action = await showDialog<String>(
       context: context,
       builder: (ctx) => StatefulBuilder(builder: (ctx, redraw) => AlertDialog(
+        // The padding scrolls too, so a big keyboard leaves room for the
+        // buttons alone; the bar at the dialog's edge.
+        contentPadding: EdgeInsets.zero,
         // The landscape screen is short: the fields go two to a row to fit
-        // above the buttons, and scroll when the keyboard takes half of it.
-        scrollable: true,
-        title: const Text('Commander link'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
+        // above the buttons, and the rest scrolls, with a bar that shows
+        // there is more. The title scrolls with it: fixed, it pushed the
+        // buttons under a keyboard taking half the screen.
+        content: Scrollbar(
+          controller: scroll,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: scroll,
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Commander link', style: Theme.of(context).textTheme.headlineSmall),
+                ),
+              ),
           // What the WiFi icon stands for.
           Align(
             alignment: Alignment.centerLeft,
@@ -554,7 +633,17 @@ class _DashPageState extends State<DashPage> {
           ),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton(onPressed: _setupHelp, child: const Text('Setup steps')),
+            child: Row(children: [
+              TextButton(onPressed: _setupHelp, child: const Text('Setup steps')),
+              if (_update case final u?)
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _installUpdate();
+                  },
+                  child: Text('Update to ${u.version}'),
+                ),
+            ]),
           ),
           Row(children: [
             Expanded(
@@ -673,6 +762,8 @@ class _DashPageState extends State<DashPage> {
             ),
           ]),
         ]),
+          ),
+        ),
         actions: [
           // Bluetooth sticks to the Commander it was approved on; this lets
           // it pair with a replacement.
@@ -695,6 +786,7 @@ class _DashPageState extends State<DashPage> {
         ],
       )),
     );
+    scroll.dispose();
     if (!mounted) return;
     if (action == 'diag') {
       await Navigator.push(

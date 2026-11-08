@@ -11,6 +11,8 @@ import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.app.PendingIntent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.location.LocationManager
@@ -24,11 +26,15 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import android.view.Surface
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+
+private const val INSTALL_STATUS = "com.teslashdash.tesla_dash.INSTALL_STATUS"
 
 class MainActivity : FlutterActivity() {
 
@@ -201,9 +207,116 @@ class MainActivity : FlutterActivity() {
                             if (opened) "opened" else "missing"
                         }
                     )
+                    "latestRelease" -> Thread {
+                        val json = try {
+                            fetch("https://api.github.com/repos/cchvuth/tesla-dash/releases/latest")
+                                .inputStream.bufferedReader().readText()
+                        } catch (e: Exception) {
+                            null
+                        }
+                        runOnUiThread { result.success(json) }
+                    }.start()
+                    "canInstall" -> result.success(
+                        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+                    )
+                    "allowInstalls" -> {
+                        startActivity(
+                            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName"))
+                        )
+                        result.success(null)
+                    }
+                    "installUpdate" -> {
+                        // The small arm64 APK for a 64-bit ARM phone, the
+                        // all-ABI one otherwise.
+                        val url = if (Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a")
+                            call.argument<String>("arm64") else call.argument<String>("any")
+                        if (url == null) return@setMethodCallHandler result.success("no apk")
+                        Thread {
+                            val err = try {
+                                installApk(url)
+                                null
+                            } catch (e: Exception) {
+                                e.message ?: e.javaClass.simpleName
+                            }
+                            runOnUiThread { result.success(err ?: "started") }
+                        }.start()
+                    }
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /**
+     * A GET on the phone's default network (mobile data or home WiFi): the
+     * process itself may be bound to the Commander's internet-less WiFi
+     * ([bindWifi]). GitHub wants a User-Agent.
+     */
+    private fun fetch(url: String): HttpURLConnection {
+        val u = URL(url)
+        val conn = (cm.activeNetwork?.openConnection(u) ?: u.openConnection()) as HttpURLConnection
+        conn.setRequestProperty("User-Agent", "wattline")
+        conn.setRequestProperty("Accept", "application/vnd.github+json")
+        conn.connectTimeout = 15000
+        conn.readTimeout = 30000
+        conn.instanceFollowRedirects = true // the asset lives on another host
+        if (conn.responseCode !in 200..299) throw Exception("HTTP ${conn.responseCode}")
+        return conn
+    }
+
+    /**
+     * Downloads the APK and hands it to Android's installer: Android asks to
+     * allow installs from this app the first time, and confirms the update
+     * (the result comes to [installStatus]). The app is replaced and closes.
+     */
+    private fun installApk(url: String) {
+        val pi = packageManager.packageInstaller
+        val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            .apply { setAppPackageName(packageName) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
+        }
+        val id = pi.createSession(params)
+        pi.openSession(id).use { session ->
+            fetch(url).inputStream.use { input ->
+                session.openWrite("update.apk", 0, -1).use { out ->
+                    input.copyTo(out)
+                    session.fsync(out)
+                }
+            }
+            registerInstallStatus()
+            val intent = Intent(INSTALL_STATUS).setPackage(packageName)
+            val flags = PendingIntent.FLAG_UPDATE_CURRENT or
+                (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+            session.commit(PendingIntent.getBroadcast(this, id, intent, flags).intentSender)
+        }
+    }
+
+    private var installStatus: BroadcastReceiver? = null
+
+    /** Shows Android's own confirmation, and tells the dash a failure. */
+    private fun registerInstallStatus() {
+        if (installStatus != null) return
+        installStatus = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, intent: Intent) {
+                when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+                    PackageInstaller.STATUS_PENDING_USER_ACTION -> {
+                        @Suppress("DEPRECATION")
+                        val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+                        confirm?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                    }
+                    PackageInstaller.STATUS_SUCCESS -> {}
+                    else -> channel?.invokeMethod(
+                        "updateFailed", intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE) ?: "cancelled"
+                    )
+                }
+            }
+        }
+        val filter = IntentFilter(INSTALL_STATUS)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(installStatus, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(installStatus, filter)
+        }
     }
 
     /**
@@ -365,6 +478,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         runCatching { unregisterReceiver(wifiState) }
+        installStatus?.let { runCatching { unregisterReceiver(it) } }
         stopLook?.invoke()
         channel = null
         unbind()

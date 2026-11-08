@@ -101,6 +101,10 @@ class Panda extends ChangeNotifier {
   double? brakePct;
   double? _brakeBar;
 
+  /// Android's installer refused or the user cancelled an in-app update
+  /// (it shares this class's native channel); the dash says so.
+  void Function(String why)? onUpdateFailed;
+
   /// The steering wheel's angle from ID129, deg (on trial: traced only).
   double? _steerSccm;
 
@@ -635,6 +639,8 @@ class Panda extends ChangeNotifier {
     // the car now, from the quick steps, rather than out the backoff.
     _net.setMethodCallHandler((call) async {
       switch (call.method) {
+        case 'updateFailed':
+          onUpdateFailed?.call('${call.arguments}');
         case 'wifiEnabled':
           _wifiOnAt = DateTime.now();
           _attempt = 0;

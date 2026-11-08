@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- The in-app update: the new APK goes to Android's installer, which asks
+         to allow this app as a source the first time (see MainActivity,
+         "installUpdate"). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
@@ -24,7 +28,7 @@
         tools:ignore="ProtectedPermissions"/>
 
     <application
-        android:label="Tesla Dash"
+        android:label="Wattline"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
