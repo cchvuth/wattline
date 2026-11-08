@@ -1218,16 +1218,21 @@ class _CarLights extends CustomPainter {
       if (steerLines) {
         final wheelbase = h * (_Car.axles[1] - _Car.axles[0]); // 2.89 m
         // Wheels dead straight (held after a turn): a turn too wide to see.
-        final r = wheelbase / tan(max(road.abs(), 1e-4)), side = road > 0 ? -1 : 1; // left: centre to the left
+        // In reverse the paths leave the rear wheels straight and, true to
+        // scale, hardly bend within the room behind the car: drawn 40 %
+        // tighter there, so the turn reads as it does going forward.
+        final r = wheelbase / tan(max(road.abs(), 1e-4)) * (reverse ? 0.6 : 1), side = road > 0 ? -1 : 1; // left: centre to the left
         final cx = w * _Car.centre, c = Offset(cx + side * r, h * _Car.axles[1]);
         final step = h * 0.022;
         // Each line the true path of a point just outside the body, one arc
         // about that point. Forward, from the mirror tips on (at full lock
         // the outer one dips under the front corner and comes out ahead of
-        // it); in reverse, from beside the rear wheels backwards, ending
-        // above the bottom bar.
-        final len = reverse ? h * 0.36 : h * 0.7, dir = reverse ? -1 : 1;
-        final from = reverse ? h * _Car.axles[1] : h * _Car.pathFrom.$1;
+        // it); in reverse the same shape back to front: from beside the car
+        // as far behind its middle as the mirrors are ahead of it, back past
+        // the tail, ending above the bottom bar. (From the rear wheels the
+        // paths leave straight back and bend too little to read.)
+        final len = reverse ? h * 0.53 : h * 0.7, dir = reverse ? -1 : 1;
+        final from = h * (reverse ? 1 - _Car.pathFrom.$1 : _Car.pathFrom.$1);
         for (final s in [-1, 1]) {
           final p = Offset(cx + s * w * _Car.pathFrom.$2, from);
           final rad = (p - c).distance, a0 = atan2(p.dy - c.dy, p.dx - c.dx);
