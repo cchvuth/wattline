@@ -67,6 +67,10 @@ or down. The cards are energy (battery, power use, pack health), drive
 (lights and grip, Autopilot, g-meter, outside), the car, the buttons and
 the route. Either side can show any card, and each side remembers its own.
 
+| Energy and buttons | Drive and route | The car and energy |
+|---|---|---|
+| ![](docs/screenshots/basic-1.png) | ![](docs/screenshots/basic-2.png) | ![](docs/screenshots/basic-3.png) |
+
 ## Where the data comes from
 
 The Commander offers two links, and the app uses both:
