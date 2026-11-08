@@ -191,7 +191,7 @@ class _RingPainter extends CustomPainter {
       final room = _deg(90) - (_right.start + _right.sweep) - _deg(10); // to the sector's end, less the gap
       final reach = room * v.brake.clamp(0, 100) / 100;
       canvas.drawArc(rect, _deg(90) - reach, 2 * reach, false, stroke(kAlert)..strokeWidth = w * 0.35);
-      _curved(canvas, c, r - w * 0.7, 'BRAKE APPLIED', TextStyle(
+      _curved(canvas, c, r + w * 0.6, 'BRAKE APPLIED', TextStyle(
           fontFamily: kFont, color: kAlert, fontSize: r * 0.032, fontWeight: FontWeight.w100, letterSpacing: r * 0.012));
     }
 
@@ -260,8 +260,8 @@ class _RingPainter extends CustomPainter {
     }
   }
 
-  /// [text] centred on the ring's bottom, upright, curving with it: each
-  /// letter's foot on the circle of [radius], turned to its tangent.
+  /// [text] centred on the ring's bottom, upright, curving with it, under
+  /// it: each letter's top on the circle of [radius], turned to its tangent.
   static (String, TextStyle)? _glyphsFor;
   static List<TextPainter> _glyphs = const [];
   static void _curved(Canvas canvas, Offset c, double radius, String text, TextStyle style) {
@@ -281,7 +281,7 @@ class _RingPainter extends CustomPainter {
         ..save()
         ..translate(c.dx + radius * cos(mid), c.dy + radius * sin(mid))
         ..rotate(mid - _deg(90));
-      g.paint(canvas, Offset(-g.width / 2, -g.height));
+      g.paint(canvas, Offset(-g.width / 2, 0));
       canvas.restore();
       a -= g.width / radius;
     }
