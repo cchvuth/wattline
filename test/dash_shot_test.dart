@@ -308,7 +308,7 @@ void main() {
     final o = car()
       ..navRoute = true
       ..navMinutes = 9
-      ..navEnergyKwh = 48.8 // at arrival: 1.8 kWh of the 50.6 left
+      ..navEnergyKwh = 40.6 // at arrival: 10 kWh of the 50.6 left
       ..lvKw = 0.6
       ..highBeam = true; // the beams reaching past the car card's top
     final key = GlobalKey();
@@ -366,6 +366,8 @@ void main() {
     expect(find.textContaining('PEAK'), findsOneWidget);
     expect(find.text('OUTSIDE'), findsOneWidget);
     expect(find.text('Central Market'), findsOneWidget);
+    // At arrival: the battery, and what the route takes of it now (52 %).
+    expect(find.text('47% −5', findRichText: true), findsOneWidget);
     await shot('basic-2');
     // Every card on either side: the left stack on to the route as well.
     await swipe(left, 3);

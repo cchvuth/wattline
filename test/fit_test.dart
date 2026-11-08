@@ -337,7 +337,7 @@ void main() {
     await _frames(t);
     expect(find.textContaining('508 km'), findsOneWidget); // left at arrival, 7 used
     expect(find.text('1.0 kWh'), findsOneWidget); // the route's energy
-    expect(find.text('98%'), findsOneWidget);
+    expect(find.text('98% −2', findRichText: true), findsOneWidget); // at arrival, 2 used
     expect(find.text('100%'), findsOneWidget); // the battery dial
     final ring = t.getSize(find.byType(RingGauge));
     await t.pumpWidget(const SizedBox());

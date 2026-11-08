@@ -308,9 +308,13 @@ class _Nav extends StatelessWidget {
               ]),
               style: style ?? big),
         ]);
+    // Beside it, as beside the range, what the route takes of the battery now.
+    final used = pct == null || o.socPct == null ? 0 : (o.socPct! - pct).round();
     final battery = energy == null
         ? null
-        : stat(Icons.battery_std, energy, style: (pct ?? 100) < 10 ? big.copyWith(color: kAlert) : big);
+        : stat(Icons.battery_std, energy,
+            style: (pct ?? 100) < 10 ? big.copyWith(color: kAlert) : big,
+            note: oneLine || used <= 0 ? null : ' −$used');
     // One line, scaled to the width it has, never wrapped.
     final line = FittedBox(
       fit: BoxFit.scaleDown,
