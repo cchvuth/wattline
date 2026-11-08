@@ -146,9 +146,10 @@ class _SideColumn extends StatelessWidget {
 /// is as large as its card allows.
 /// ponytail: one fixed scale, set for the S23 Ultra's 823 x 384 dp.
 class _Cards extends StatefulWidget {
-  const _Cards({super.key, required this.cards, this.initial = 0, this.onPage});
+  const _Cards({super.key, required this.cards, this.initial = 0, this.onPage, this.dotsLeft = false});
 
   final List<Widget> cards;
+  final bool dotsLeft; // the dots on the screen's edge: the left stack's at its left
   final int initial; // the card shown first
   final ValueChanged<int>? onPage;
 
@@ -168,15 +169,17 @@ class _CardsState extends State<_Cards> {
   }
 
   @override
-  Widget build(BuildContext context) => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Stack(children: [
+  Widget build(BuildContext context) {
+    // Room for the dots on their side.
+    final pad = widget.dotsLeft ? const EdgeInsets.fromLTRB(14, 6, 8, 6) : const EdgeInsets.fromLTRB(8, 6, 14, 6);
+    return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        // No card behind, nothing clipped: the car's beams and paths run on
+        // past its side.
+        child: Stack(clipBehavior: Clip.none, children: [
           PageView(
             controller: _ctrl,
+            clipBehavior: Clip.none,
             scrollDirection: Axis.vertical,
             onPageChanged: (p) {
               setState(() => _page = p);
@@ -185,9 +188,9 @@ class _CardsState extends State<_Cards> {
             children: [
               for (final c in widget.cards)
                 c is _Fill
-                    ? Padding(padding: const EdgeInsets.fromLTRB(4, 4, 16, 4), child: FittedBox(child: c.child))
+                    ? Padding(padding: pad, child: FittedBox(child: c.child))
                     : Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 6, 14, 6),
+                        padding: pad,
                         child: LayoutBuilder(
                           builder: (context, box) => FittedBox(
                             fit: BoxFit.fill,
@@ -198,7 +201,8 @@ class _CardsState extends State<_Cards> {
             ],
           ),
           Positioned(
-            right: 8,
+            left: widget.dotsLeft ? 0 : null,
+            right: widget.dotsLeft ? null : 0,
             top: 0,
             bottom: 0,
             child: Column(mainAxisAlignment: MainAxisAlignment.center, spacing: 6, children: [
@@ -213,6 +217,7 @@ class _CardsState extends State<_Cards> {
           ),
         ]),
       );
+  }
 }
 
 /// Fixed-size content centred on a card, shrunk only if it does not fit.
@@ -1055,10 +1060,9 @@ Widget _statRow(BuildContext context, String label, String value, {Color color =
     ]);
 
 class _Pack extends StatelessWidget {
-  const _Pack({required this.obd, this.outside = true, this.pack = true});
+  const _Pack({required this.obd});
 
   final Panda obd;
-  final bool outside, pack; // the air outside (and washer), the pack's health
 
   @override
   Widget build(BuildContext context) {
@@ -1068,14 +1072,10 @@ class _Pack extends StatelessWidget {
     Widget row(String label, String value, {Color color = Colors.white}) => _statRow(context, label, value, color: color);
     // Shrinks rather than overflows when a large font meets a wide ring.
     return FittedBox(fit: BoxFit.scaleDown, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (outside) ...[
-        row('OUTSIDE', out == null ? '—' : _deg(out), color: out != null && out <= 3 ? kCold : Colors.white),
-        if (o.wifiLive && o.washerLow) row('WASHER', 'LOW', color: kWarn),
-      ],
-      if (pack) ...[
-        row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
-        row('DEGRADATION', kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
-      ],
+      row('OUTSIDE', out == null ? '—' : _deg(out), color: out != null && out <= 3 ? kCold : Colors.white),
+      if (o.wifiLive && o.washerLow) row('WASHER', 'LOW', color: kWarn),
+      row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
+      row('DEGRADATION', kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
     ]));
   }
 }

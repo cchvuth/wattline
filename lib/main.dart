@@ -934,20 +934,16 @@ class _DashPageState extends State<DashPage> {
   /// The basic layout: the ring between two stacks of cards, one card of
   /// each showing, swiped up or down for the next. Each card answers one
   /// question, its graphic taking the room its text leaves: energy (the
-  /// battery, what the pack feeds besides the motors or the charge, the
-  /// pack's health), the drive (assist, g-meter, lamps, the air outside),
-  /// the car as large as it fits, the buttons, the route. Both stacks hold
+  /// battery, what the pack feeds besides the motors or the charge), the
+  /// drive (assist, g-meter, the air outside, the pack's health), the car as
+  /// large as it fits (its lamps drawn on it), the buttons, the route. Both stacks hold
   /// every card, so either side shows any; each side's card is kept.
   Widget _basicRow(Panda o) {
     List<Widget> cards() => [
           Column(children: [
             _grow(_Battery(obd: o)),
             const SizedBox(height: 8),
-            // The draws and the pack's health in one column, the values lined up.
-            Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
-              _Pack(obd: o, outside: false),
-            ]),
+            if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
           ]),
           Column(children: [
             ?_autopilot(o),
@@ -955,8 +951,8 @@ class _DashPageState extends State<DashPage> {
             // The g-meter (WiFi only), as big as the room.
             Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
             const SizedBox(height: 6),
-            _Lights(obd: o),
-            _Pack(obd: o, pack: false),
+            // The air outside and the pack's health; the lamps show on the car.
+            _Pack(obd: o),
           ]),
           _Fill(_Cabin(obd: o, draws: false)),
           _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
@@ -967,7 +963,7 @@ class _DashPageState extends State<DashPage> {
         ];
     Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
     return Row(children: [
-      Expanded(child: _Cards(key: const ValueKey('left'), cards: cards(), initial: _cardLeft,
+      Expanded(child: _Cards(key: const ValueKey('left'), cards: cards(), initial: _cardLeft, dotsLeft: true,
           onPage: (p) => keep('cardLeft', _cardLeft = p))),
       _ring(o),
       Expanded(child: _Cards(key: const ValueKey('right'), cards: cards(), initial: _cardRight,
