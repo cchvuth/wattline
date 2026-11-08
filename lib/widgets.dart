@@ -1230,7 +1230,7 @@ class _CarLights extends CustomPainter {
         for (final s in [-1, 1]) {
           final p = Offset(cx + s * w * _Car.pathFrom.$2, h * _Car.pathFrom.$1);
           final rad = (p - c).distance, a0 = atan2(p.dy - c.dy, p.dx - c.dx);
-          // Reverse: the same two ends, the line between them pushed further
+          // The same two ends as the true arc, the line between them pushed further
           // out than the true arc (a quadratic through its middle, bulge x3).
           Offset at(double d) {
             final a = a0 + side * d / rad;
@@ -1240,7 +1240,7 @@ class _CarLights extends CustomPainter {
           final ctrl = chord + (mid - chord) * 2 * 3;
           for (var d = 0.0; d <= len; d += step) {
             final t = d / len;
-            final q = reverse ? q0 * ((1 - t) * (1 - t)) + ctrl * (2 * t * (1 - t)) + q1 * (t * t) : at(d);
+            final q = q0 * ((1 - t) * (1 - t)) + ctrl * (2 * t * (1 - t)) + q1 * (t * t);
             canvas.drawCircle(Offset(q.dx, reverse ? h - q.dy : q.dy), 1.6,
                 Paint()..color = Colors.white.withValues(alpha: 0.8 * (1 - d / len)));
           }
