@@ -380,9 +380,9 @@ void main() {
     expect(find.text('Central Market'), findsOneWidget);
     // At arrival: the battery, and what the route takes of it now (52 %).
     expect(find.text('47% −5', findRichText: true), findsOneWidget);
-    // The route's values the full layout's figures' size on screen (16 at a
-    // 1.1 line), not scaled up with the card.
-    expect(t.getRect(find.text('9 min')).height, closeTo(16 * 1.1, 0.6));
+    // The route's values the figures' size on screen (16 a little enlarged,
+    // at a 1.1 line), not scaled up with the card.
+    expect(t.getRect(find.text('9 min')).height, closeTo(16 * kBasicFigures * 1.1, 0.6));
     await shot('basic-2');
     // Every card on either side: the left stack on to the route as well.
     await swipe(left, 3);
@@ -400,12 +400,12 @@ void main() {
     expect(t.getRect(find.image(const AssetImage('assets/car/car.png'))).height, greaterThan(255));
     expect(t.getRect(find.text('38').first).height, greaterThan(19));
     await shot('basic-3');
-    // The battery dial and the figures' rows as big on screen as in the full
-    // layout: not scaled up with the rest of the card.
+    // The battery dial as big on screen as in the full layout, the figures'
+    // rows a little bigger: neither scaled up with the rest of the card.
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
     await t.pump(const Duration(milliseconds: 300));
     expect(t.getRect(find.text('52%', findRichText: true)).height, closeTo(basicPct, 0.5));
-    expect(t.getRect(find.text('DEGRADATION')).height, closeTo(basicRow, 0.5));
+    expect(basicRow / t.getRect(find.text('DEGRADATION')).height, closeTo(kBasicFigures, 0.03));
     await t.pumpWidget(const SizedBox());
   });
 

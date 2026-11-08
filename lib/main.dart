@@ -73,6 +73,10 @@ const kBasicCards = <Set<int>>[
   {0x238, 0x347, 0x3FD, 0x33A, 0x352}, // route: on a route, energy and minutes, battery now
 ];
 
+/// The basic layout's figures' rows and route, over the full layout's size on
+/// screen (the rest of its cards are bigger still).
+const kBasicFigures = 1.1;
+
 /// The ids the basic layout has no use for with these two cards showing.
 Set<int> basicSkip(int left, int right) {
   final need = {...kBasicBase, ...kBasicCards[left], ...kBasicCards[right]};
@@ -1013,9 +1017,10 @@ class _DashPageState extends State<DashPage> {
   /// the route. Both stacks hold every card, so either side shows any; each
   /// side's card is kept. The assist state is at the ring's top right.
   Widget _basicRow(Panda o) {
-    // The figures' rows (label and value) as on the full layout's screen,
-    // not scaled up with the rest: next to the ring they read as notes.
-    const small = 1 / _CardsState._scale;
+    // The figures' rows (label and value) and the route a little over the
+    // full layout's size on screen ([kBasicFigures]), not scaled up with the
+    // rest: next to the ring they read as notes.
+    const small = kBasicFigures / _CardsState._scale;
     List<Widget> cards() => [
           Column(children: [
             // The dial as big on screen as in the full layout: next to the
