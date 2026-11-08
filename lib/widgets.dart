@@ -1218,27 +1218,22 @@ class _CarLights extends CustomPainter {
       if (steerLines) {
         final wheelbase = h * (_Car.axles[1] - _Car.axles[0]); // 2.89 m
         // Wheels dead straight (held after a turn): a turn too wide to see.
-        // In reverse the paths leave the rear wheels straight and, true to
-        // scale, hardly bend within the room behind the car: drawn 40 %
-        // tighter there, so the turn reads as it does going forward.
-        final r = wheelbase / tan(max(road.abs(), 1e-4)) * (reverse ? 0.6 : 1), side = road > 0 ? -1 : 1; // left: centre to the left
+        final r = wheelbase / tan(max(road.abs(), 1e-4)), side = road > 0 ? -1 : 1; // left: centre to the left
         final cx = w * _Car.centre, c = Offset(cx + side * r, h * _Car.axles[1]);
         final step = h * 0.022;
         // Each line the true path of a point just outside the body, one arc
-        // about that point. Forward, from the mirror tips on (at full lock
-        // the outer one dips under the front corner and comes out ahead of
-        // it); in reverse the same shape back to front: from beside the car
-        // as far behind its middle as the mirrors are ahead of it, back past
-        // the tail, ending above the bottom bar. (From the rear wheels the
-        // paths leave straight back and bend too little to read.)
-        final len = reverse ? h * 0.53 : h * 0.7, dir = reverse ? -1 : 1;
-        final from = h * (reverse ? 1 - _Car.pathFrom.$1 : _Car.pathFrom.$1);
+        // about that point, from the mirror tips on (at full lock the outer
+        // one dips under the front corner and comes out ahead of it). In
+        // reverse the very same shape flipped front to back, ending above the
+        // bottom bar.
+        final len = reverse ? h * 0.53 : h * 0.7;
         for (final s in [-1, 1]) {
-          final p = Offset(cx + s * w * _Car.pathFrom.$2, from);
+          final p = Offset(cx + s * w * _Car.pathFrom.$2, h * _Car.pathFrom.$1);
           final rad = (p - c).distance, a0 = atan2(p.dy - c.dy, p.dx - c.dx);
           for (var d = 0.0; d <= len; d += step) {
-            final a = a0 + dir * side * d / rad; // forward: up the screen; reverse: down
-            canvas.drawCircle(c + Offset(cos(a), sin(a)) * rad, 1.6,
+            final a = a0 + side * d / rad;
+            final q = c + Offset(cos(a), sin(a)) * rad;
+            canvas.drawCircle(Offset(q.dx, reverse ? h - q.dy : q.dy), 1.6,
                 Paint()..color = Colors.white.withValues(alpha: 0.8 * (1 - d / len)));
           }
         }
