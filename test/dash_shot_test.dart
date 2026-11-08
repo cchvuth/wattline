@@ -488,6 +488,23 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  // The full layout charging: no g-meter, so the dial, the charge and the
+  // pack's figures sit together in the right column's middle.
+  testWidgets('full layout: charging, the right column centred', (t) async {
+    t.view
+      ..physicalSize = const Size(823.5, 384) * _dpr
+      ..devicePixelRatio = _dpr;
+    final (_, charging) = _shots['charging']!;
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: charging(), bt: Commander())));
+    await t.pump(const Duration(milliseconds: 300));
+    final ring = t.getRect(find.byType(RingGauge)); // the row's height
+    final dial = find.byWidgetPredicate((w) => w is CustomPaint && w.painter.runtimeType.toString() == '_DialPainter');
+    final top = t.getRect(dial).top, bottom = t.getRect(find.text('DEGRADATION')).bottom;
+    expect(find.text('CHARGE'), findsOneWidget);
+    expect((top - ring.top) - (ring.bottom - bottom), closeTo(0, 6));
+    await t.pumpWidget(const SizedBox());
+  });
+
   // The assist state as the car's wheel on a disc at the ring's top right:
   // grey ready, blue steering, flashing amber for the hands-on nag (the wheel
   // dark on it), red and still once Autopilot is locked out. The air outside

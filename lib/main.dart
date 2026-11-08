@@ -961,6 +961,13 @@ class _DashPageState extends State<DashPage> {
     (await SharedPreferences.getInstance()).setBool('basic', _basic);
   }
 
+  /// The full layout's figures under the battery: what the pack feeds besides
+  /// the motors (WiFi) and its health; the air outside is by the ring.
+  Widget _figures(Panda o) => Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        if (o.wifiLive && o.otherKw != null) _Draws(obd: o, minor: _minor),
+        _Pack(obd: o, outside: false, minor: _minor),
+      ]);
+
   /// The bar along the foot: the links, the route ([nav]: basic has it on a
   /// card), Google Maps and the car panel.
   Widget _controls({bool nav = true}) =>
@@ -1175,31 +1182,28 @@ class _DashPageState extends State<DashPage> {
                           ),
                         ),
                         _ring(o, outside: true),
-                        // The battery dial and the g-meter pinned top and
-                        // bottom, the pack's figures between them: the dial's
-                        // top level with the first button's; the g-meter's
-                        // place kept while it has nothing to say (parked it
-                        // only reads 0; no WiFi, no reading), so the figures
-                        // do not jump. Charging, the charge over the figures.
-                        Expanded(child: Column(children: [
-                          Padding(padding: const EdgeInsets.fromLTRB(8, 14, 8, 0), child: _Battery(obd: o, width: 128)),
-                          Expanded(child: _SideColumn(children: [
-                            if (o.wifiLive && o.charging) _Charge(obd: o),
-                            // What the pack feeds besides the motors (WiFi),
-                            // and its health; the air outside is by the ring.
-                            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                              if (o.wifiLive && o.otherKw != null) _Draws(obd: o, minor: _minor),
-                              _Pack(obd: o, outside: false, minor: _minor),
-                            ]),
-                          ])),
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
-                            child: Visibility.maintain(
-                              visible: o.wifiLive && !o.charging && o.gear != 'P' && (o.gLong != null || o.gLat != null),
-                              child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o)),
-                            ),
-                          ),
-                        ])),
+                        // Driving: the battery dial and the g-meter pinned top
+                        // and bottom, the pack's figures between them: the
+                        // dial's top level with the first button's; the
+                        // g-meter's place kept while it has nothing to say
+                        // (parked it only reads 0; no WiFi, no reading), so the
+                        // figures do not jump. Charging (no g-meter): the dial,
+                        // the charge and the figures together in the middle.
+                        Expanded(
+                          child: o.wifiLive && o.charging
+                              ? _SideColumn(children: [_Battery(obd: o, width: 128), _Charge(obd: o), _figures(o)])
+                              : Column(children: [
+                                  Padding(padding: const EdgeInsets.fromLTRB(8, 14, 8, 0), child: _Battery(obd: o, width: 128)),
+                                  Expanded(child: _SideColumn(children: [_figures(o)])),
+                                  Padding(
+                                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
+                                    child: Visibility.maintain(
+                                      visible: o.wifiLive && o.gear != 'P' && (o.gLong != null || o.gLat != null),
+                                      child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o)),
+                                    ),
+                                  ),
+                                ]),
+                        ),
                         _Actions(obd: o, bt: _bt, onTap: _press, right: true),
                       ]),
                     ),
