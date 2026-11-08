@@ -1218,7 +1218,7 @@ class _CarLights extends CustomPainter {
       if (steerLines) {
         final wheelbase = h * (_Car.axles[1] - _Car.axles[0]); // 2.89 m
         // Wheels dead straight (held after a turn): a turn too wide to see.
-        final r = wheelbase / tan(max(road.abs(), 1e-4)) * (reverse ? 0.7 : 1), side = road > 0 ? -1 : 1; // left: centre to the left
+        final r = wheelbase / tan(max(road.abs(), 1e-4)), side = road > 0 ? -1 : 1; // left: centre to the left
         final cx = w * _Car.centre, c = Offset(cx + side * r, h * _Car.axles[1]);
         final step = h * 0.022;
         // Each line the true path of a point just outside the body, one arc
@@ -1226,13 +1226,21 @@ class _CarLights extends CustomPainter {
         // one dips under the front corner and comes out ahead of it). In
         // reverse the very same shape flipped front to back, ending above the
         // bottom bar.
-        final len = reverse ? h * 0.57 : h * 0.7; // reverse: tighter (x0.7), a touch longer to end as low
+        final len = reverse ? h * 0.53 : h * 0.7;
         for (final s in [-1, 1]) {
           final p = Offset(cx + s * w * _Car.pathFrom.$2, h * _Car.pathFrom.$1);
           final rad = (p - c).distance, a0 = atan2(p.dy - c.dy, p.dx - c.dx);
-          for (var d = 0.0; d <= len; d += step) {
+          // Reverse: the same two ends, the line between them pushed further
+          // out than the true arc (a quadratic through its middle, bulge x3).
+          Offset at(double d) {
             final a = a0 + side * d / rad;
-            final q = c + Offset(cos(a), sin(a)) * rad;
+            return c + Offset(cos(a), sin(a)) * rad;
+          }
+          final q0 = at(0), q1 = at(len), mid = at(len / 2), chord = (q0 + q1) / 2;
+          final ctrl = chord + (mid - chord) * 2 * 3;
+          for (var d = 0.0; d <= len; d += step) {
+            final t = d / len;
+            final q = reverse ? q0 * ((1 - t) * (1 - t)) + ctrl * (2 * t * (1 - t)) + q1 * (t * t) : at(d);
             canvas.drawCircle(Offset(q.dx, reverse ? h - q.dy : q.dy), 1.6,
                 Paint()..color = Colors.white.withValues(alpha: 0.8 * (1 - d / len)));
           }
