@@ -113,9 +113,24 @@ void main() {
       ..fan1 = 'AUTO'
       ..fan2 = 'LOW'
       ..buckled.addAll({'D', 'P', '2L', '2R'})
+      // 71 % of the usable 78.1 kWh over the 3.7 kWh buffer now, 4 kWh for
+      // the 12 km to go: 66 % at arrival.
+      ..packLeftKwh = 59.12
+      ..packBufferKwh = 3.68
       ..navRoute = true
       ..navMinutes = 18
-      ..navEnergyKwh = 52;
+      ..navEnergyKwh = 55.1;
+    // The pack's other draws, from a frame of each as the car sends them (as
+    // the highway shot has them): the pack's power over the motors', the
+    // compressor's 1.7 kW and the 12 V side's 0.8 among it. The drive then
+    // sets the motors itself.
+    o
+      ..onFrame(0x118, 1, [0, 0, 0x80, 0, 0, 0, 0, 0])
+      ..onFrame(0x132, 1, [0x40, 0x9C, 0x90, 0xFB, 0, 0])
+      ..onFrame(0x2E5, 1, [0, 0, 0, 0, 0xD0, 0x48, 0])
+      ..onFrame(0x266, 1, [0, 0, 0, 0, 0x88, 0x60, 0])
+      ..onFrame(0x2A7, 1, [150, 137, 75, 21, 46, 188, 5, 129])
+      ..onFrame(0x2B4, 1, [183, 5, 88, 14, 34, 2]);
     for (final id in [0x238, 0x2B6, 0x3A1]) {
       o.frames[id] = Frame(0);
     }
@@ -124,7 +139,12 @@ void main() {
         theme: kTheme,
         debugShowCheckedModeBanner: false,
         home: RepaintBoundary(
-            key: key, child: DashPage(demo: o, bt: Commander()..show(BtLink.lean, 'ready')))));
+            key: key,
+            child: DashPage(
+                demo: o,
+                // No destination name or route length: the Commander has them
+                // only when paired with the car as a key.
+                bt: Commander()..show(BtLink.lean, 'ready')))));
     await t.pump(const Duration(milliseconds: 500));
     await t.runAsync(() => Future.wait([
           for (final e in find.byType(Image).evaluate()) precacheImage((e.widget as Image).image, e),

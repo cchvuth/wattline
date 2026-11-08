@@ -955,19 +955,29 @@ class _DashPageState extends State<DashPage> {
   }
 
   /// The speed and power ring, the same in both layouts.
+  /// Full to basic or back (the gear's tap), kept as the settings' switch is.
+  Future<void> _toggleBasic() async {
+    setState(() => _basic = !_basic);
+    (await SharedPreferences.getInstance()).setBool('basic', _basic);
+  }
+
+  /// The bar along the foot: the links, the route ([nav]: basic has it on a
+  /// card), Google Maps and the car panel.
+  Widget _controls({bool nav = true}) =>
+      _Controls(obd: _obd, bt: _bt, onWifi: _settings, onBt: _btStatus, onMaps: _maps, nav: nav);
+
   /// The speed and power ring, the same in both layouts, with the assist
   /// state at its top right: just outside the ring's arc, a little below its
-  /// box's corner. [outside]: the air outside at its bottom left, likewise
-  /// clear of the arc (the full layout; basic has it on a card).
+  /// box's corner. [outside]: the air outside at its top left, level with
+  /// the assist state and as clear of the arc (the full layout; basic has it
+  /// on a card).
   Widget _ring(Panda o, {bool outside = false}) => AspectRatio(
         aspectRatio: 1,
         child: LayoutBuilder(builder: (context, box) {
           const size = 30.0;
           // As RingGauge draws it: radius r, the motors' arcs 8.5 % of r wide.
           final half = box.maxWidth / 2, r = half - 6, d = r * 1.0425 + size / 2 + 5;
-          const a = -38 * pi / 180, b = 130 * pi / 180;
-          // The temperature's top right corner just clear of the arc.
-          final c = r * 1.0425 + 6;
+          const a = -38 * pi / 180;
           final icon = _autopilot(o, size: size);
           return Stack(clipBehavior: Clip.none, children: [
             Positioned.fill(
@@ -981,8 +991,9 @@ class _DashPageState extends State<DashPage> {
                   pedalPct: o.live ? o.pedalPct : null,
                   brakePct: o.live ? o.brakePct : null,
                   regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
-                  // Digital speed sits in the ring, the gear under it.
-                  child: _Centre(obd: o, gear: true),
+                  // Digital speed sits in the ring, the gear under it; a tap
+                  // on the gear swaps the layouts.
+                  child: _Centre(obd: o, gear: true, onGear: _toggleBasic),
                 ),
               ),
             ),
@@ -992,11 +1003,12 @@ class _DashPageState extends State<DashPage> {
                 top: half + d * sin(a) - size / 2,
                 child: icon,
               ),
+            // Mirroring the icon: its right edge where the icon's left one is.
             if (outside)
               Positioned(
-                right: box.maxWidth - (half + c * cos(b)),
-                top: half + c * sin(b),
-                child: _Outside(obd: o),
+                right: half + d * cos(a) - size / 2 + 3,
+                top: half + d * sin(a) - size / 2,
+                child: _Outside(obd: o, rowHeight: size),
               ),
           ]);
         }),
@@ -1022,11 +1034,12 @@ class _DashPageState extends State<DashPage> {
     // rest: next to the ring they read as notes.
     const small = kBasicFigures / _CardsState._scale;
     List<Widget> cards() => [
-          Column(children: [
+          // The dial and its rows together in the card's middle.
+          Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             // The dial as big on screen as in the full layout: next to the
-            // ring, not bigger than it.
-            Expanded(child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: _Battery(obd: o, width: 128 / _CardsState._scale)))),
-            const SizedBox(height: 8),
+            // ring, not bigger than it (smaller only if the card is short).
+            Flexible(child: FittedBox(fit: BoxFit.scaleDown, child: _Battery(obd: o, width: 128 / _CardsState._scale))),
+            const SizedBox(height: 12),
             // The draws and the pack's health in one column, the values lined
             // up; all of them here, whatever the full layout's switch says.
             Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1044,10 +1057,8 @@ class _DashPageState extends State<DashPage> {
             // The air outside.
             _Pack(obd: o, pack: false, size: small),
           ]),
-          // The car as big as the card allows, under a little room for its
-          // beams (drawn shorter here, so the low beam shows whole), its
-          // figures a quarter bigger.
-          _Fill(_Cabin(obd: o, figures: 1.25, reach: 0.8), top: 0.08),
+          // The car, low going forward and high in reverse ([_BasicCar]).
+          _Fill((height) => _BasicCar(obd: o, height: height)),
           _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),
@@ -1063,7 +1074,15 @@ class _DashPageState extends State<DashPage> {
             keep('cardLeft', _cardLeft = p);
             _fitSubscription();
           })),
-      _ring(o),
+      // The ring with the bar under it, as wide as the ring: the cards
+      // either side take the screen's whole height (the bar has no route
+      // here, only the links and the buttons).
+      IntrinsicWidth(
+        child: Column(children: [
+          Expanded(child: _ring(o)),
+          Padding(padding: const EdgeInsets.only(top: 6), child: _controls(nav: false)),
+        ]),
+      ),
       Expanded(child: _Cards(key: const ValueKey('right'), cards: cards(), initial: _cardRight,
           onPage: (p) {
             keep('cardRight', _cardRight = p);
@@ -1132,9 +1151,9 @@ class _DashPageState extends State<DashPage> {
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
-                  child: Column(children: [
+                  child: _basic ? _basicRow(o) : Column(children: [
                     Expanded(
-                      child: _basic ? _basicRow(o) : Row(children: [
+                      child: Row(children: [
                         _Actions(obd: o, bt: _bt, onTap: _press),
                         // The lamps, and under them the car as large as the
                         // room left (its figures with it).
@@ -1177,17 +1196,7 @@ class _DashPageState extends State<DashPage> {
                         _Actions(obd: o, bt: _bt, onTap: _press, right: true),
                       ]),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: _Controls(
-                        obd: o,
-                        bt: _bt,
-                        onWifi: _settings,
-                        onBt: _btStatus,
-                        onMaps: _maps,
-                        nav: !_basic, // basic has the route on a card
-                      ),
-                    ),
+                    Padding(padding: const EdgeInsets.only(top: 6), child: _controls()),
                   ]),
                 ),
                 ]),

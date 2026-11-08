@@ -401,6 +401,29 @@ void main() {
     });
   }
 
+  // A tap on the gear under the speed swaps the full and the basic layout,
+  // and the choice is kept.
+  testWidgets('the gear swaps the layouts', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    t.view.physicalSize = const Size(823, 384);
+    final o = Panda()
+      ..status = 'live'
+      ..gear = 'D';
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
+    await _frames(t);
+    final prefs = await SharedPreferences.getInstance();
+    expect(find.byType(PageView), findsNothing);
+    await t.tap(find.text('D'));
+    await _frames(t);
+    expect(find.byType(PageView), findsNWidgets(2));
+    expect(prefs.getBool('basic'), isTrue);
+    await t.tap(find.text('D'));
+    await _frames(t);
+    expect(find.byType(PageView), findsNothing);
+    expect(prefs.getBool('basic'), isFalse);
+    await t.pumpWidget(const SizedBox());
+  });
+
   // ScanMyTesla off: the Commander's Bluetooth data alone, and what only
   // WiFi has (the car: tyres, seats, cabin) gone from the column.
   testWidgets('Dash on Bluetooth only', (t) async {

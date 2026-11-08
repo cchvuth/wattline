@@ -20,17 +20,17 @@ It shows:
   charging, the arc dim on to the charge limit), and the pedal as a line
   along the top that grows from the centre (not on a rear-motor car);
 - the gear engaged under the speed, speed limit, and the cruise set speed
-  and follow distance; at the ring's top right the car's Autopilot icon
-  (grey available, blue steering, flashing amber for its hands-on nag), at
-  its bottom left the outside temperature;
+  and follow distance, or washer fluid low; at the ring's top right the
+  car's Autopilot icon (grey available, blue steering, flashing amber for
+  its hands-on nag), at its top left the outside temperature;
 - turn signals, blind spot and brake as glows along the screen edges;
 - the lights on (DRL, low, high), drawn on the car too (light bars front
   and rear, low and high beams as cones ahead, the tail brighter braking,
   the indicators in amber), and grip, each only while on: the car's
   slippery-road verdict and traction or stability control stepping in
   (both while moving), Slip Start left on;
-- the outside temperature (ice blue near freezing), washer fluid low, the
-  climate's power draw and degradation; the pack's coldest cells and whether
+- the outside temperature (ice blue near freezing), the climate's power
+  draw and degradation; the pack's coldest cells and whether
   it is heating over the battery % (a settings switch adds 12 V and other
   power and the cell imbalance to the full layout; basic always shows them);
 - the route along the bottom: time to go and arrival time, the energy
@@ -64,11 +64,13 @@ on its own side: trunk, mirror tilt and the charge port on the left,
 frunk, recirculation and interior lights on the right. More actions
 (locks, honk, flash, climate) are under ⋯.
 
-**Basic layout** (picked at the first launch, or a switch in the settings):
-the same ring, with bigger text in a stack of cards on each side, swiped up
-or down. The cards are energy (battery, power use, pack health), drive
-(lights and grip, g-meter, outside), the car, the buttons and
-the route. Either side can show any card, and each side remembers its own.
+**Basic layout** (picked at the first launch, a switch in the settings, or a
+tap on the gear under the speed, which swaps back too):
+the same ring, with bigger text in a full-height stack of cards on each side,
+swiped up or down. The cards are energy (battery, power use, pack health),
+drive (lights and grip, g-meter, outside), the car (raised in reverse to show
+the path lines behind it), the buttons and the route. Either side can show
+any card, and each side remembers its own.
 
 | Energy and buttons | Drive and route | The car and energy |
 |---|---|---|

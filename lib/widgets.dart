@@ -7,10 +7,13 @@ part of 'main.dart';
 /// charge cue below; under them the gear, where [gear] asks for it (the
 /// compact dash has it in its corner).
 class _Centre extends StatelessWidget {
-  const _Centre({required this.obd, this.gear = false});
+  const _Centre({required this.obd, this.gear = false, this.onGear});
 
   final Panda obd;
   final bool gear;
+
+  /// A tap on the gear: the full and the basic layout swap.
+  final VoidCallback? onGear;
 
   @override
   Widget build(BuildContext context) {
@@ -70,25 +73,35 @@ class _Centre extends StatelessWidget {
           ),
           // Only the gear engaged, in the gap the ring leaves at its foot,
           // clear of the brake's arc there.
+          // A finger's room round it to tap (the letter where it was).
           if (gear)
             Positioned(
-              bottom: c.maxHeight * 0.05,
-              child: Text(o.gear,
-                  style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.w700,
-                      color: const {'P', 'R', 'N', 'D'}.contains(o.gear) ? Colors.white : Colors.white38)),
+              bottom: c.maxHeight * 0.05 - 8,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onGear,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 8),
+                  child: Text(o.gear,
+                      style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w700,
+                          color: const {'P', 'R', 'N', 'D'}.contains(o.gear) ? Colors.white : Colors.white38)),
+                ),
+              ),
             ),
         ]),
       );
   }
 
   /// The line under the speed: charging, the most the pack takes now and
-  /// why; else the cruise set speed and gap while cruise holds one. (A
-  /// regen cap shows on the ring itself.)
+  /// why; else the cruise set speed and gap while cruise holds one; and the
+  /// washer fluid low, amber: on its own in words, beside the cruise cue its
+  /// drop alone. (A regen cap shows on the ring itself.)
   Widget? _cue(bool charge) {
-    final o = obd;
+    final o = obd, washer = o.wifiLive && o.washerLow;
     const s = TextStyle(fontSize: 15, letterSpacing: 1, fontWeight: FontWeight.w600);
+    const drop = GlyphIcon(Glyph.washer, size: 15, color: kWarn);
     if (charge) {
       final max = o.chargeMaxKw, why = o.chargeWhy;
       if (max == null && why == null) return null;
@@ -106,6 +119,14 @@ class _Centre extends StatelessWidget {
           const Icon(Icons.directions_car_filled, size: 16, color: kAccent),
           Text(' $gap', style: s.copyWith(color: kAccent)),
         ],
+        if (washer) ...[const SizedBox(width: 12), drop],
+      ]);
+    }
+    if (washer) {
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        drop,
+        const SizedBox(width: 4),
+        Text('WASHER LOW', style: s.copyWith(color: kWarn, fontSize: 13)),
       ]);
     }
     return null;
@@ -137,27 +158,30 @@ class _SideColumn extends StatelessWidget {
       );
 }
 
-/// The air outside by the ring (ice blue near freezing), over it its name,
-/// or in its place, amber, that the washer fluid is low. Right-aligned, as
-/// it sits to the left of the arc.
+/// The air outside by the ring (ice blue near freezing), centred in a
+/// [rowHeight] row so it sits level with what is across the ring; right-
+/// aligned, as it sits to the left of the arc. No name: by the ring, a
+/// temperature is the air outside.
 class _Outside extends StatelessWidget {
-  const _Outside({required this.obd});
+  const _Outside({required this.obd, required this.rowHeight});
 
   final Panda obd;
+  final double rowHeight;
 
   @override
   Widget build(BuildContext context) {
-    final o = obd, c = o.outsideC, washer = o.wifiLive && o.washerLow;
-    return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.end, children: [
-      Text(washer ? 'WASHER LOW' : 'OUTSIDE',
-          style: TextStyle(fontSize: 10, height: 1.2, letterSpacing: 1, color: washer ? kWarn : Colors.white54)),
-      Text(c == null ? '—' : _deg(c),
-          style: TextStyle(
-              fontSize: 18,
-              height: 1.15,
-              color: c != null && c <= 3 ? kCold : Colors.white,
-              fontFeatures: const [FontFeature.tabularFigures()])),
-    ]);
+    final c = obd.outsideC;
+    return SizedBox(
+      height: rowHeight,
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: Text(c == null ? '—' : _deg(c),
+            style: TextStyle(
+                fontSize: 16,
+                color: c != null && c <= 3 ? kCold : Colors.white,
+                fontFeatures: const [FontFeature.tabularFigures()])),
+      ),
+    );
   }
 }
 
@@ -297,7 +321,7 @@ class _CardsState extends State<_Cards> {
     // Room for the dots on their side.
     final pad = widget.dotsLeft ? const EdgeInsets.fromLTRB(14, 6, 8, 6) : const EdgeInsets.fromLTRB(8, 6, 14, 6);
     return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8),
         // No card behind, nothing clipped: the car's beams and paths run on
         // past its side.
         child: Stack(clipBehavior: Clip.none, children: [
@@ -314,8 +338,7 @@ class _CardsState extends State<_Cards> {
                 c is _Fill
                     ? LayoutBuilder(
                         builder: (context, box) => Padding(
-                            padding: EdgeInsets.fromLTRB(pad.left, box.maxHeight * c.top, pad.right, 0),
-                            child: FittedBox(child: c.child)))
+                            padding: EdgeInsets.fromLTRB(pad.left, 0, pad.right, 0), child: c.builder(box.maxHeight)))
                     : Padding(
                         padding: pad,
                         child: LayoutBuilder(
@@ -350,15 +373,52 @@ class _CardsState extends State<_Cards> {
 /// Fixed-size content centred on a card, shrunk only if it does not fit.
 Widget _fit(Widget child) => Center(child: FittedBox(fit: BoxFit.scaleDown, child: child));
 
-/// A card of [_Cards] that fills it, as large as it fits.
-class _Fill extends StatelessWidget {
-  const _Fill(this.child, {this.top = 0});
+/// Basic's car card: the whole car, as tall as the card allows with its
+/// beams in view: low going forward, its beams and paths ahead showing (the
+/// high beam to the screen's edge, plainly past the low), high in reverse,
+/// its paths behind showing; it slides between the two. Never cut off.
+class _BasicCar extends StatelessWidget {
+  const _BasicCar({required this.obd, required this.height});
 
-  final Widget child;
-  final double top; // room left above it, a share of the card's height (the car's beams shine into it)
+  final Panda obd;
+  final double height; // the card's
+
+  /// The screen's edge this far over the card's top: beams may reach into it.
+  static const above = 6.0;
 
   @override
-  Widget build(BuildContext context) => child;
+  Widget build(BuildContext context) {
+    final h = height;
+    // Forward: 0.26 of the car over its top for the beams (the low one ends
+    // at 0.23 past the nose, the high one at 0.38, fading), the car and its
+    // brake glow (0.02) under it. Reverse: its paths end 0.175 of it past the
+    // tail, on the card.
+    final car = (h + above) / 1.28;
+    final top = obd.gear == 'R' ? h - 2 - 1.175 * car : 0.26 * car - above;
+    return Stack(clipBehavior: Clip.none, children: [
+      AnimatedPositioned(
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOut,
+        top: top - _Cabin.fillInset(context),
+        left: 0,
+        right: 0,
+        // Its figures a little over the full layout's, whatever the car's size.
+        child: Center(child: _Cabin(obd: obd, figures: 1.38, carHeight: car)),
+      ),
+    ]);
+  }
+}
+
+/// A card of [_Cards] that fills it, as large as it fits.
+class _Fill extends StatelessWidget {
+  const _Fill(this.builder);
+
+  /// The picture for the card's height; drawn at the size it asks, not
+  /// scaled with the cards' text.
+  final Widget Function(double height) builder;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) => builder(box.maxHeight));
 }
 
 /// The route the car is driving, along the foot of the dash: time to go,
@@ -1185,7 +1245,6 @@ class _Pack extends StatelessWidget {
     return FittedBox(fit: BoxFit.scaleDown, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       if (outside) ...[
         row('OUTSIDE', out == null ? '—' : _deg(out), color: out != null && out <= 3 ? kCold : Colors.white),
-        if (o.wifiLive && o.washerLow) row('WASHER', 'LOW', color: kWarn),
       ],
       if (pack) ...[
         if (minor) row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
@@ -1349,12 +1408,7 @@ class _CarLights extends CustomPainter {
     this.steerLines = false,
     this.reverse = false,
     this.beams = false,
-    this.reach = 1,
   });
-
-  /// The beams' length over their usual: basic's bigger car has less room
-  /// ahead of it to the screen's edge.
-  final double reach;
 
   /// In R: the path lines run out behind the car.
   final bool reverse;
@@ -1498,9 +1552,9 @@ class _CarLights extends CustomPainter {
       // Under the car: the beams and the bars' glow. The body hides the half
       // that would light it, and the glow fades round the bars' ends.
       if (high) {
-        cone(front, 0.38 * reach, 0.56); // further, brighter
+        cone(front, 0.38, 0.56); // further, brighter
       } else if (low) {
-        cone(front, 0.234 * reach, 0.35);
+        cone(front, 0.234, 0.35);
       }
       if (front_) canvas.drawPath(frontPath, line(Colors.white.withValues(alpha: 0.6), 3, 1.5));
       if (rear_) canvas.drawPath(rearPath, line(kAlert.withValues(alpha: brake ? 0.95 : 0.5), brake ? 6 : 3, brake ? 2.5 : 1.5));
@@ -1530,8 +1584,7 @@ class _CarLights extends CustomPainter {
       old.steerDeg != steerDeg ||
       old.steerLines != steerLines ||
       old.reverse != reverse ||
-      old.beams != beams ||
-      old.reach != reach;
+      old.beams != beams;
 }
 
 /// The car as it is, dark seats and all: what the car picker shows for each
@@ -1560,15 +1613,21 @@ class CarSeats extends StatelessWidget {
 /// it unbuckled (that row's figures then step aside). Not over Bluetooth,
 /// which has none of it; before the stream the saved pressures on the car.
 class _Cabin extends StatelessWidget {
-  const _Cabin({required this.obd, this.figures = 1, this.reach = 1});
+  const _Cabin({required this.obd, this.figures = 1, this.carHeight});
 
   final Panda obd;
 
+  /// The car's own height, for a basic card: drawn to it, its figures
+  /// staying their own size ([figures]), its paddings trimmed (its top
+  /// [fillInset] under the widget's). Otherwise its own size, which the full
+  /// layout's column scales, figures and all.
+  final double? carHeight;
+
+  /// Where a [carHeight] car's picture starts, under the widget's top.
+  static double fillInset(BuildContext context) => 2 + MediaQuery.textScalerOf(context).scale(2);
+
   /// The tyre and seat figures' size, over the full layout's (basic: bigger).
   final double figures;
-
-  /// The beams' length ([_CarLights.reach]).
-  final double reach;
 
   @override
   Widget build(BuildContext context) {
@@ -1584,7 +1643,12 @@ class _Cabin extends StatelessWidget {
     };
     // As tall as the column allows: the rows' figures sit on the seats.
     final dir = _Car.dir(o.thirdRow);
-    final carH = scale(236), carW = carH * _Car.aspect; // the image's own shape
+    final fill = carHeight != null;
+    // Room above it for the beams over the lamps' row, behind it for the
+    // brake glow, and round it for the unbuckled seat's frame.
+    final padTop = scale(fill ? 2 : 4), padBottom = scale(fill ? 4 : 6), frame = fill ? 2.0 : 4.0;
+    final carH = carHeight ?? scale(236);
+    final carW = carH * _Car.aspect; // the image's own shape
     // A tyre's psi on the body over its wheel: between the outline and the
     // seats, as far in from each side (the mirrors make the image wider than
     // the body, the left more than the right).
@@ -1612,7 +1676,10 @@ class _Cabin extends StatelessWidget {
             ]),
           ),
         );
-    // A row's air and fan on a dark pill over its seats, centred on them.
+    // A row's air and fan on a dark pill over its seats, centred on them. On
+    // basic's card the air as big as a tyre's figure and the fan's word as
+    // its "psi", so the two read alike.
+    final temp = (fill ? 14 : 16) * f, word = (fill ? 9 : 11) * f;
     Widget row(double at, double c, [String? fan]) => Positioned(
           left: carW * _Car.pillL,
           width: carW * _Car.pillW,
@@ -1627,12 +1694,12 @@ class _Cabin extends StatelessWidget {
                 decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Text('${c.round()}°',
-                      style: TextStyle(fontSize: 16 * f, height: 1.1, fontWeight: FontWeight.w600, color: Colors.white)),
+                      style: TextStyle(fontSize: temp, height: 1.1, fontWeight: FontWeight.w600, color: Colors.white)),
                   if (fan != null)
                     Row(mainAxisSize: MainAxisSize.min, children: [
-                      GlyphIcon(fan == 'OFF' ? Glyph.fanOff : Glyph.fan, size: 12 * f, color: Colors.white70),
+                      GlyphIcon(fan == 'OFF' ? Glyph.fanOff : Glyph.fan, size: word + 1 * f, color: Colors.white70),
                       if (fan != 'OFF')
-                        Text(' $fan', style: TextStyle(fontSize: 11 * f, height: 1.1, color: Colors.white70)),
+                        Text(' $fan', style: TextStyle(fontSize: word, height: 1.1, color: Colors.white70)),
                     ]),
                 ]),
               ),
@@ -1658,8 +1725,7 @@ class _Cabin extends StatelessWidget {
                   steerDeg: o.steerDeg,
                   steerLines: o.steerLines,
                   reverse: o.gear == 'R',
-                  beams: true,
-                  reach: reach)),
+                  beams: true)),
         Image.asset('$dir/car.png', fit: BoxFit.fill),
         if (live)
           for (final s in _Car.seats(o.thirdRow))
@@ -1694,7 +1760,7 @@ class _Cabin extends StatelessWidget {
     return FittedBox(
       fit: BoxFit.scaleDown,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+        padding: EdgeInsets.fromLTRB(6, frame, 6, frame),
         decoration: belt
             ? BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
@@ -1704,7 +1770,7 @@ class _Cabin extends StatelessWidget {
             : null,
         // The beams reach up over the lamps' row above. A little room
         // behind for the brake glow.
-        child: Padding(padding: EdgeInsets.only(top: scale(4), bottom: scale(6)), child: car),
+        child: Padding(padding: EdgeInsets.only(top: padTop, bottom: padBottom), child: car),
       ),
     );
   }

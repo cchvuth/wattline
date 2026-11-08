@@ -323,8 +323,6 @@ void main() {
                 basic: true,
                 bt: Commander()
                   ..show(BtLink.lean, 'ready')
-                  ..navDest = 'Central Market'
-                  ..navMiles = 3.1
                   ..navMinutes = 9))));
     await t.pump(const Duration(milliseconds: 300));
     await t.runAsync(() => Future.wait([
@@ -362,8 +360,9 @@ void main() {
     expect(find.text('12 V'), findsOneWidget);
     expect(find.text('0.6 kW'), findsOneWidget);
     expect(find.text('IMBALANCE'), findsOneWidget);
-    expect(find.text('Central Market'), findsNothing);
+    expect(find.text('9 min'), findsNothing); // no route in the bar
     final basicPct = t.getRect(find.text('52%', findRichText: true)).height;
+    final basicRing = t.getRect(find.byType(RingGauge)).height;
     final basicRow = t.getRect(find.text('DEGRADATION')).height;
     expect(o.skip, basicSkip(0, 3)); // only what the ring and these two cards read
     // The assist state at the ring's top right, whichever cards show.
@@ -377,7 +376,7 @@ void main() {
     await swipe(right, 1);
     expect(find.textContaining('PEAK'), findsOneWidget);
     expect(find.text('OUTSIDE'), findsOneWidget);
-    expect(find.text('Central Market'), findsOneWidget);
+    expect(find.text('9 min'), findsOneWidget);
     // At arrival: the battery, and what the route takes of it now (52 %).
     expect(find.text('47% −5', findRichText: true), findsOneWidget);
     // The route's values the figures' size on screen (16 a little enlarged,
@@ -386,7 +385,7 @@ void main() {
     await shot('basic-2');
     // Every card on either side: the left stack on to the route as well.
     await swipe(left, 3);
-    expect(find.text('Central Market'), findsNWidgets(2));
+    expect(find.text('9 min'), findsNWidgets(2));
     // Each side's card is kept for the next start.
     final prefs = await SharedPreferences.getInstance();
     expect((prefs.getInt('cardLeft'), prefs.getInt('cardRight')), (4, 4));
@@ -395,16 +394,39 @@ void main() {
     await swipe(left, -2);
     await swipe(right, -4);
     expect(find.text('CLIMATE'), findsOneWidget);
-    // The car as tall as the card allows under its beams' room (it was 233
-    // with more room), its figures a quarter bigger again.
-    expect(t.getRect(find.image(const AssetImage('assets/car/car.png'))).height, greaterThan(255));
-    expect(t.getRect(find.text('38').first).height, greaterThan(19));
+    // The whole car, as tall as the card allows with its beams in view, the
+    // cards the screen's whole height (it was 233), its figures their own
+    // size whatever the car's.
+    final carImage = find.image(const AssetImage('assets/car/car.png'));
+    final page = t.getRect(find.byType(PageView).first);
+    expect(page.bottom, greaterThan(t.getRect(find.byType(RingGauge)).bottom + 40)); // past the ring, to the foot
+    expect(t.getRect(carImage).height, greaterThan(285));
+    expect(t.getRect(find.text('38').first).height, closeTo(21.1, 0.6)); // the figures' size kept
+    // Going forward it sits low, its beams ahead in view, its tail on the
+    // card; in reverse it slides up, its paths behind it in view, its nose on
+    // the card.
+    final forward = t.getRect(carImage).top;
+    expect(forward, greaterThan(60));
+    expect(t.getRect(carImage).bottom, lessThanOrEqualTo(page.bottom));
+    o
+      ..gear = 'R'
+      ..notifyListeners();
+    await t.pumpAndSettle();
+    await shot('basic-reverse');
+    expect(t.getRect(carImage).top, lessThan(forward - 30));
+    expect(t.getRect(carImage).top, greaterThanOrEqualTo(page.top));
+    o
+      ..gear = 'D'
+      ..notifyListeners();
+    await t.pumpAndSettle();
+    expect(t.getRect(carImage).top, closeTo(forward, 0.5));
     await shot('basic-3');
     // The battery dial as big on screen as in the full layout, the figures'
     // rows a little bigger: neither scaled up with the rest of the card.
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
     await t.pump(const Duration(milliseconds: 300));
     expect(t.getRect(find.text('52%', findRichText: true)).height, closeTo(basicPct, 0.5));
+    expect(t.getRect(find.byType(RingGauge)).height, closeTo(basicRing, 0.5)); // the ring the same
     expect(basicRow / t.getRect(find.text('DEGRADATION')).height, closeTo(kBasicFigures, 0.03));
     await t.pumpWidget(const SizedBox());
   });
@@ -438,15 +460,41 @@ void main() {
     expect(icon.dx, greaterThan(ring.center.dx + ring.width * 0.3)); // top right
     expect(icon.dy, lessThan(ring.center.dy - ring.height * 0.25));
     expect(disc('AP READY'), const Color(0xFF5E5E5E));
-    expect(out.center.dx, lessThan(ring.center.dx - ring.width * 0.3)); // bottom left
-    expect(out.center.dy, greaterThan(ring.center.dy + ring.height * 0.3));
+    // The air outside at the top left, level with the icon, no label.
+    expect(out.center.dx, lessThan(ring.center.dx - ring.width * 0.3));
+    expect(out.center.dy, closeTo(icon.dy, 1.5));
     expect(out.left, greaterThan(car.right)); // clear of the car
-    // Neither on the arc: the disc (radius 15) and the text's corner nearest
+    expect(find.text('OUTSIDE'), findsNothing);
+    // Neither on the arc: the disc (radius 15) and the text's corners nearest
     // the ring wholly outside its outer edge.
     final r = (ring.width / 2 - 6) * 1.0425;
     expect(t.getSize(find.byTooltip('AP READY')), const Size(30, 30));
     expect((icon - ring.center).distance - 15, greaterThan(r));
-    expect((t.getRect(find.text('OUTSIDE')).topRight - ring.center).distance, greaterThan(r));
+    expect((out.bottomRight - ring.center).distance, greaterThan(r));
+    expect((out.topRight - ring.center).distance, greaterThan(r));
+    // The washer fluid low in the ring, between its unit and the gear, in
+    // words; beside a cruise cue, its drop alone.
+    o
+      ..washerLow = true
+      ..notifyListeners();
+    await t.pump();
+    final unit = t.getCenter(find.text('km/h')).dy, gear = t.getCenter(find.text('D')).dy;
+    final washer = t.getCenter(find.text('WASHER LOW')).dy;
+    expect(washer, allOf(greaterThan(unit + 10), lessThan(gear - 10)));
+    Finder drop() => find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyph.washer);
+    expect(drop(), findsOneWidget);
+    o
+      ..cruiseSet = 90
+      ..notifyListeners();
+    await t.pump();
+    expect(find.text('WASHER LOW'), findsNothing);
+    expect(find.text('SET 90'), findsOneWidget);
+    expect(drop(), findsOneWidget);
+    o
+      ..washerLow = false
+      ..cruiseSet = null
+      ..notifyListeners();
+    await t.pump();
     // The battery dial on top, the pack's figures under it, the g-meter
     // under them.
     final dial = t.getCenter(find.text('64%', findRichText: true)).dy;

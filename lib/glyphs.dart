@@ -29,6 +29,7 @@ enum Glyph {
   fanOff,
   autopilot,
   cruise,
+  washer,
 }
 
 class GlyphIcon extends StatelessWidget {
@@ -150,6 +151,17 @@ class _GlyphPainter extends CustomPainter {
         // The wheel alone, filled: docs/icons/autopilot.svg's path, whose
         // disc (radius 12) the caller paints behind it in the state's colour.
         canvas.drawPath(_autopilotWheel, Paint()..color = color);
+      case Glyph.washer:
+        // A drop of the fluid, outlined.
+        canvas.drawPath(
+            Path()
+              ..moveTo(12, 3)
+              ..cubicTo(12, 3, 5.6, 10.4, 5.6, 14.6)
+              ..cubicTo(5.6, 18.1, 8.5, 21, 12, 21)
+              ..cubicTo(15.5, 21, 18.4, 18.1, 18.4, 14.6)
+              ..cubicTo(18.4, 10.4, 12, 3, 12, 3)
+              ..close(),
+            line);
       case Glyph.cruise:
         // The cruise gauge: an arc open at its foot, the needle up and right.
         canvas.drawArc(Rect.fromCircle(center: const Offset(12, 13.6), radius: 8.8), pi * 5 / 6, pi * 4 / 3, false, line);
