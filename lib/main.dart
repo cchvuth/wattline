@@ -934,27 +934,36 @@ class _DashPageState extends State<DashPage> {
   /// The basic layout: the ring between two stacks of cards, one card of
   /// each showing, swiped up or down for the next. Each card answers one
   /// question, its graphic taking the room its text leaves: energy (the
-  /// battery, what the pack feeds besides the motors or the charge), the
-  /// drive (assist, g-meter, the air outside, the pack's health), the car as
-  /// large as it fits (its lamps drawn on it), the buttons, the route. Both stacks hold
+  /// battery, what the pack feeds besides the motors or the charge, the
+  /// pack's health), the drive (lamps and grip, assist, g-meter, the air
+  /// outside), the car as large as it fits (lowered for its beams ahead),
+  /// the buttons, the route. Both stacks hold
   /// every card, so either side shows any; each side's card is kept.
   Widget _basicRow(Panda o) {
     List<Widget> cards() => [
           Column(children: [
-            _grow(_Battery(obd: o)),
+            // Four-fifths of the card's width at most: the dial, not a wall.
+            Expanded(child: FractionallySizedBox(widthFactor: 0.8, child: FittedBox(child: _Battery(obd: o)))),
             const SizedBox(height: 8),
-            if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
+            // The draws and the pack's health in one column, the values lined up.
+            Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
+              _Pack(obd: o, outside: false),
+            ]),
           ]),
           Column(children: [
+            // The lamps and grip on top, then the assist state.
+            _Lights(obd: o),
+            const SizedBox(height: 4),
             ?_autopilot(o),
             const SizedBox(height: 6),
             // The g-meter (WiFi only), as big as the room.
             Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
             const SizedBox(height: 6),
-            // The air outside and the pack's health; the lamps show on the car.
-            _Pack(obd: o),
+            // The air outside.
+            _Pack(obd: o, pack: false),
           ]),
-          _Fill(_Cabin(obd: o, draws: false)),
+          _Fill(_Cabin(obd: o, draws: false), top: 0.14),
           _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),

@@ -188,7 +188,10 @@ class _CardsState extends State<_Cards> {
             children: [
               for (final c in widget.cards)
                 c is _Fill
-                    ? Padding(padding: pad, child: FittedBox(child: c.child))
+                    ? LayoutBuilder(
+                        builder: (context, box) => Padding(
+                            padding: pad.add(EdgeInsets.only(top: box.maxHeight * c.top)) as EdgeInsets,
+                            child: FittedBox(child: c.child)))
                     : Padding(
                         padding: pad,
                         child: LayoutBuilder(
@@ -223,14 +226,12 @@ class _CardsState extends State<_Cards> {
 /// Fixed-size content centred on a card, shrunk only if it does not fit.
 Widget _fit(Widget child) => Center(child: FittedBox(fit: BoxFit.scaleDown, child: child));
 
-/// A graphic that grows to the room it has.
-Widget _grow(Widget child) => Expanded(child: FittedBox(child: child));
-
 /// A card of [_Cards] that fills it, as large as it fits.
 class _Fill extends StatelessWidget {
-  const _Fill(this.child);
+  const _Fill(this.child, {this.top = 0});
 
   final Widget child;
+  final double top; // room left above it, a share of the card's height (the car's beams shine into it)
 
   @override
   Widget build(BuildContext context) => child;
@@ -1060,9 +1061,10 @@ Widget _statRow(BuildContext context, String label, String value, {Color color =
     ]);
 
 class _Pack extends StatelessWidget {
-  const _Pack({required this.obd});
+  const _Pack({required this.obd, this.outside = true, this.pack = true});
 
   final Panda obd;
+  final bool outside, pack; // the air outside (and washer), the pack's health
 
   @override
   Widget build(BuildContext context) {
@@ -1072,10 +1074,14 @@ class _Pack extends StatelessWidget {
     Widget row(String label, String value, {Color color = Colors.white}) => _statRow(context, label, value, color: color);
     // Shrinks rather than overflows when a large font meets a wide ring.
     return FittedBox(fit: BoxFit.scaleDown, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      row('OUTSIDE', out == null ? '—' : _deg(out), color: out != null && out <= 3 ? kCold : Colors.white),
-      if (o.wifiLive && o.washerLow) row('WASHER', 'LOW', color: kWarn),
-      row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
-      row('DEGRADATION', kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
+      if (outside) ...[
+        row('OUTSIDE', out == null ? '—' : _deg(out), color: out != null && out <= 3 ? kCold : Colors.white),
+        if (o.wifiLive && o.washerLow) row('WASHER', 'LOW', color: kWarn),
+      ],
+      if (pack) ...[
+        row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
+        row('DEGRADATION', kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
+      ],
     ]));
   }
 }

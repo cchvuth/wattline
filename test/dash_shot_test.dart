@@ -309,7 +309,8 @@ void main() {
       ..navRoute = true
       ..navMinutes = 9
       ..navEnergyKwh = 48.8 // at arrival: 1.8 kWh of the 50.6 left
-      ..lvKw = 0.6;
+      ..lvKw = 0.6
+      ..highBeam = true; // the beams reaching past the car card's top
     final key = GlobalKey();
     await t.pumpWidget(MaterialApp(
         theme: kTheme,
@@ -351,20 +352,19 @@ void main() {
     }
 
     final left = find.byType(PageView).first, right = find.byType(PageView).last;
-    // First cards: energy left (with the 12 V draw), the buttons right; no
-    // route in the bar.
+    // First cards: energy left (the 12 V draw, the pack's health), the
+    // buttons right; no route in the bar.
     expect(find.byType(PageView), findsNWidgets(2));
     expect(find.text('CLIMATE'), findsOneWidget);
     expect(find.text('0.6 kW'), findsOneWidget);
+    expect(find.text('IMBALANCE'), findsOneWidget);
     expect(find.text('Central Market'), findsNothing);
     await shot('basic-1');
-    // One on: the drive left (with the air outside and the pack's health),
-    // the route right.
+    // One on: the drive left (with the air outside), the route right.
     await swipe(left, 1);
     await swipe(right, 1);
     expect(find.textContaining('PEAK'), findsOneWidget);
     expect(find.text('OUTSIDE'), findsOneWidget);
-    expect(find.text('IMBALANCE'), findsOneWidget);
     expect(find.text('Central Market'), findsOneWidget);
     await shot('basic-2');
     // Every card on either side: the left stack on to the route as well.
