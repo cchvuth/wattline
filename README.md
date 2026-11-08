@@ -1,7 +1,8 @@
 # Wattline
 
 A landscape driver's display for a phone mounted behind the wheel of a
-Tesla Model Y, fed by an Enhauto **S3XY Commander**. Built for the Model Y
+Tesla Model Y, fed by an Enhauto **S3XY Commander** or any Panda-protocol
+OBD WiFi adapter ([without a Commander](#without-a-commander)). Built for the Model Y
 Juniper (2025 on), 5 or 7 seats, rear- or all-wheel drive; tested on a
 7-seater. Flutter; Android first, iOS works too.
 
@@ -12,7 +13,7 @@ Juniper (2025 on), 5 or 7 seats, rear- or all-wheel drive; tested on a
 It shows:
 
 - speed in a ring, with front and rear motor power, and in red the regen
-  a cold or full pack can't take; the brake's pressure as a red line in
+  a cold or full pack can't take; how hard the brake is pressed as a red line in
   the ring's foot (a rear-motor car: the right arc is the pedals instead,
   accelerator up, brake down);
 - battery % and range in a small dial like the speed ring (a bolt while
@@ -106,6 +107,16 @@ on the Dash; unplug the Dash to have them on the phone. With ScanMyTesla
 off as well, the app has no gear then, so frunk, trunk and doors stay
 locked out (they open in P only). The app asks for
 the scroll-wheel approval only the first time, or when you tap.
+
+### Without a Commander
+
+The WiFi link is the plain Panda protocol (CAN frames over UDP), so any
+OBD WiFi adapter that streams it should feed the dash: nearly everything
+above comes from the car's own CAN frames, decoded in the app. Set the
+adapter's WiFi name, password, address and port in the settings (the
+Commander's are `S3XY_OBD`, `12345678`, `192.168.4.1`, `1338`). What only
+the Commander gives: the buttons, the destination and the route's length,
+and the recirculation state. Only tested with the Commander so far.
 
 ## Setup
 
