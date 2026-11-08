@@ -1218,7 +1218,7 @@ class _CarLights extends CustomPainter {
       if (steerLines) {
         final wheelbase = h * (_Car.axles[1] - _Car.axles[0]); // 2.89 m
         // Wheels dead straight (held after a turn): a turn too wide to see.
-        final r = wheelbase / tan(max(road.abs(), 1e-4)), side = road > 0 ? -1 : 1; // left: centre to the left
+        final r = wheelbase / tan(max(road.abs(), 1e-4)) * (reverse ? 0.7 : 1), side = road > 0 ? -1 : 1; // left: centre to the left
         final cx = w * _Car.centre, c = Offset(cx + side * r, h * _Car.axles[1]);
         final step = h * 0.022;
         // Each line the true path of a point just outside the body, one arc
@@ -1226,7 +1226,7 @@ class _CarLights extends CustomPainter {
         // one dips under the front corner and comes out ahead of it). In
         // reverse the very same shape flipped front to back, ending above the
         // bottom bar.
-        final len = reverse ? h * 0.53 : h * 0.7;
+        final len = reverse ? h * 0.57 : h * 0.7; // reverse: tighter (x0.7), a touch longer to end as low
         for (final s in [-1, 1]) {
           final p = Offset(cx + s * w * _Car.pathFrom.$2, h * _Car.pathFrom.$1);
           final rad = (p - c).distance, a0 = atan2(p.dy - c.dy, p.dx - c.dx);
