@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -717,7 +718,7 @@ void main() {
   // press (40/40/20/20 Nm) and released.
   test('the brake from the wheels\' torque', () {
     final p = Panda()..onFrame(0x185, 1, [0x14, 0x40, 0x01, 0x0A, 0xA0, 0x00, 0x54, 0xD9]);
-    expect(p.brakePct, closeTo(120 / Panda.brakeFullNm * 100, 1e-9));
+    expect(p.brakePct, closeTo(sqrt(120 / Panda.brakeFullNm) * 100, 1e-9));
     expect(p.traceLine(), contains('brake Nm=120'));
     p.onFrame(0x185, 1, [0, 0, 0, 0, 0, 0, 0x04, 0x8A]);
     expect(p.brakePct, 0);

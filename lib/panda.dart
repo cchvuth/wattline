@@ -96,7 +96,9 @@ class Panda extends ChangeNotifier {
   double? pedalPct;
 
   /// How hard the brake is pressed, %, for the ring: the friction brakes'
-  /// torque at all four wheels (ID185) against [brakeFullNm].
+  /// torque at all four wheels (ID185) against [brakeFullNm], square-rooted:
+  /// torque climbs far faster than the pedal (a press of about 10 % read
+  /// 120 Nm in the car), so a light press still shows (17 %).
   double? brakePct;
   final _brakeNm = <String, double>{};
 
@@ -1381,7 +1383,7 @@ class Panda extends ChangeNotifier {
           steerDeg = -v; // the path lines: this frame is positive to the right, as the car showed
         case 'brakeFL' || 'brakeFR' || 'brakeRL' || 'brakeRR':
           _brakeNm[e.key] = v;
-          brakePct = (_brakeNm.values.fold(0.0, (a, b) => a + b) / brakeFullNm * 100).clamp(0.0, 100.0);
+          brakePct = sqrt((_brakeNm.values.fold(0.0, (a, b) => a + b) / brakeFullNm).clamp(0.0, 1.0)) * 100;
         case 'compV':
           _compOk = v >= 200 && v <= 600 && (v - (_packV ?? v)).abs() < 40;
         case 'compW':
