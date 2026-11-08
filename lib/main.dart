@@ -12,6 +12,7 @@ import 'commander.dart';
 import 'gauge.dart';
 import 'glyphs.dart';
 import 'panda.dart';
+import 'signals.dart' show kSubscribeIds;
 import 'diag.dart';
 import 'update.dart';
 
@@ -53,6 +54,29 @@ class DashApp extends StatelessWidget {
         theme: kTheme,
         home: const DashPage(),
       );
+}
+
+/// What the basic layout reads off the bus: the ring, its centre and the
+/// edge glows always ([kBasicBase]), and each card its own ([kBasicCards],
+/// in the cards' order); the rest is not asked for while no side shows it.
+const kBasicBase = {
+  0x257, 0x118, 0x2E5, 0x266, 0x132, 0x252, 0x185, // speed, gear/pedal/brake lamp, power, regen cap, brake
+  0x2A7, 0x2B4, 0x2B3, // climate and 12 V draws: the ring's motor split takes them off the pack
+  0x399, 0x3F5, 0x286, 0x3F8, // limit and blind spots, indicators, cruise set and gap
+  0x212, 0x472, // charging: the centre's charge power and why it is capped
+};
+const kBasicCards = <Set<int>>[
+  {0x33A, 0x332, 0x352, 0x392, 0x3A1, 0x347, 0x333, 0x33B}, // energy: battery, pack heat, health, charge
+  {0x3F6, 0x2B6, 0x101, 0x321}, // drive: lamps, grip, g-meter (yaw), outside
+  {0x3A1, 0x3C2, 0x31A, 0x2F3, 0x25A, 0x219, 0x129, 0x3F6}, // car: belts, fans, tyres, path lines, lamps
+  {0x102, 0x103, 0x2E1, 0x25D, 0x273, 0x3E2, 0x243}, // buttons: doors, trunk, frunk, port, tilt, lights, recirc
+  {0x238, 0x347, 0x3FD, 0x33A, 0x352}, // route: on a route, energy and minutes, battery now
+];
+
+/// The ids the basic layout has no use for with these two cards showing.
+Set<int> basicSkip(int left, int right) {
+  final need = {...kBasicBase, ...kBasicCards[left], ...kBasicCards[right]};
+  return {for (final id in kSubscribeIds) if (!need.contains(id)) id};
 }
 
 class DashPage extends StatefulWidget {
@@ -931,6 +955,12 @@ class _DashPageState extends State<DashPage> {
         ),
       );
 
+  bool _compactNow = false;
+
+  /// Only what is on screen, in the basic layout beside nothing else.
+  void _fitSubscription() =>
+      _obd.skip = _basic && !_compactNow ? basicSkip(_cardLeft, _cardRight) : const {};
+
   /// The basic layout: the ring between two stacks of cards, one card of
   /// each showing, swiped up or down for the next. Each card answers one
   /// question, its graphic taking the room its text leaves: energy (the
@@ -973,10 +1003,16 @@ class _DashPageState extends State<DashPage> {
     Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
     return Row(children: [
       Expanded(child: _Cards(key: const ValueKey('left'), cards: cards(), initial: _cardLeft, dotsLeft: true,
-          onPage: (p) => keep('cardLeft', _cardLeft = p))),
+          onPage: (p) {
+            keep('cardLeft', _cardLeft = p);
+            _fitSubscription();
+          })),
       _ring(o),
       Expanded(child: _Cards(key: const ValueKey('right'), cards: cards(), initial: _cardRight,
-          onPage: (p) => keep('cardRight', _cardRight = p))),
+          onPage: (p) {
+            keep('cardRight', _cardRight = p);
+            _fitSubscription();
+          })),
     ]);
   }
 
@@ -992,6 +1028,9 @@ class _DashPageState extends State<DashPage> {
         listenable: Listenable.merge([_obd, _bt]),
         builder: (context, _) {
           final o = _obd;
+          // Beside Google Maps the compact dash shows its own few things.
+          _compactNow = MediaQuery.sizeOf(context).width < 700;
+          _fitSubscription();
           // Nothing moving on screen outlives the stream: a stalled link
           // blanks speed, power and pedal and drops the glows.
           final live = o.live;

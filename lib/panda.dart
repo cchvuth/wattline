@@ -901,7 +901,8 @@ class Panda extends ChangeNotifier {
     // anyway. Lose the first and the stream goes quiet, which repairs it; had
     // a streamed id come through in the second, it would pass for live with
     // the rest of the list missing.
-    for (final id in [...kSubscribeIds.where(alwaysOn.contains), ...kSubscribeIds.where((i) => !alwaysOn.contains(i))]) {
+    final ids = kSubscribeIds.where((i) => !_skip.contains(i));
+    for (final id in [...ids.where(alwaysOn.contains), ...ids.where((i) => !alwaysOn.contains(i))]) {
       if (packet.length > 1 + 3 * 42) {
         _send(packet);
         packet = <int>[0x0f];
@@ -1052,10 +1053,17 @@ class Panda extends ChangeNotifier {
         _sparseAll = false;
         _sparseOn.clear();
         sparseOps++;
-        _sendIds(0x0f, polledIds.toList());
+        _sendIds(0x0f, polledIds.where((i) => !_skip.contains(i)).toList());
       }
       return;
     }
+    // A skipped id whose frames still come: its remove was lost; again.
+    if (_skipStray >= 3) {
+      sparseFixes++;
+      _skipAt = DateTime.now();
+      _sendIds(0x0e, _skip.toList());
+    }
+    _skipStray = 0;
     final slot = _wheel[_slot++ % _wheel.length];
     final parked = _gear == 'P', left = _wasParked && !parked;
     final hot = DateTime.now().isBefore(_hotUntil);
@@ -1076,12 +1084,35 @@ class Panda extends ChangeNotifier {
       _sparseOn[i] = want;
       if (!want) _sparseOffAt[i] = DateTime.now();
       sparseOps++;
-      _sendIds(want ? 0x0f : 0x0e, g.ids);
+      _sendIds(want ? 0x0f : 0x0e, want ? g.ids.where((i) => !_skip.contains(i)).toList() : g.ids);
     }
   }
 
-  void _sendIds(int op, List<int> ids) =>
-      _send([op, for (final id in ids) ...[0xff, id >> 8, id & 0xff]]);
+  void _sendIds(int op, List<int> ids) {
+    if (ids.isNotEmpty) _send([op, for (final id in ids) ...[0xff, id >> 8, id & 0xff]]);
+  }
+
+  /// Ids nothing on screen shows now (the basic layout's hidden cards): not
+  /// asked for, so the Commander has fewer frames to send and the speed
+  /// comes steadier. Their last values stay until they come again.
+  Set<int> get skip => _skip;
+  set skip(Set<int> v) {
+    if (setEquals(v, _skip)) return;
+    final back = _skip.difference(v), drop = v.difference(_skip);
+    _skip = Set.unmodifiable(v);
+    _skipAt = DateTime.now();
+    if (_all) return;
+    _sendIds(0x0e, drop.toList());
+    // Back on: a streamed id at once, a polled one if its group is on now.
+    _sendIds(0x0f, [
+      for (final id in back)
+        if (alwaysOn.contains(id) || !_sparseWanted || (_sparseOn[_sparseOf[id]] ?? true)) id,
+    ]);
+  }
+
+  Set<int> _skip = const {};
+  DateTime _skipAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int _skipStray = 0;
 
   void _tick() {
     // An awake car sends hundreds of frames a second, so a few silent
@@ -1207,6 +1238,7 @@ class Panda extends ChangeNotifier {
       _startCount(_canAt);
     }
     _frameCount++;
+    if (_skip.contains(id) && DateTime.now().difference(_skipAt).inMilliseconds > 300) _skipStray++;
     if (_sparseOf[id] case final n?) {
       final off = _sparseOffAt[n];
       if (_sparseOn[n] == false && off != null && DateTime.now().difference(off).inMilliseconds > 300) {

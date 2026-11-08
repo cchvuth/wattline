@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tesla_dash/diag.dart';
+import 'package:tesla_dash/main.dart' show kBasicBase, kBasicCards, basicSkip;
 import 'package:tesla_dash/panda.dart';
 import 'package:tesla_dash/signals.dart';
 
@@ -1022,5 +1023,17 @@ void main() {
     expect(p.climateKw, closeTo(1.7, 1e-9));
     p.onFrame(0x2A7, 1, [255, 255, 255, 255, 255, 0x90, 0x03, 0]); // 228 V: no pack here
     expect(p.climateKw, closeTo(1.7, 1e-9));
+  });
+
+  // The basic layout asks only for what it shows: every id the app reads
+  // belongs to the ring or to a card, so none goes missing for good; and with
+  // energy and the buttons showing, the car's and the g-meter's are skipped.
+  test('basic layout: every id has a card, hidden cards are not asked for', () {
+    expect({...kBasicBase, for (final c in kBasicCards) ...c}.containsAll(kSubscribeIds), isTrue);
+    final skip = basicSkip(0, 3);
+    expect(skip, containsAll([0x129, 0x101, 0x3C2, 0x238]));
+    expect(skip.intersection(kBasicBase), isEmpty);
+    expect(skip, isNot(contains(0x33A))); // the battery
+    expect(skip, isNot(contains(0x102))); // the doors' buttons
   });
 }

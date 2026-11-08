@@ -359,6 +359,7 @@ void main() {
     expect(find.text('0.6 kW'), findsOneWidget);
     expect(find.text('IMBALANCE'), findsOneWidget);
     expect(find.text('Central Market'), findsNothing);
+    expect(o.skip, basicSkip(0, 3)); // only what the ring and these two cards read
     await shot('basic-1');
     // One on: the drive left (with the air outside), the route right.
     await swipe(left, 1);
@@ -375,6 +376,7 @@ void main() {
     // Each side's card is kept for the next start.
     final prefs = await SharedPreferences.getInstance();
     expect((prefs.getInt('cardLeft'), prefs.getInt('cardRight')), (4, 4));
+    expect(o.skip, basicSkip(4, 4));
     // Back: the car left, energy right.
     await swipe(left, -2);
     await swipe(right, -4);

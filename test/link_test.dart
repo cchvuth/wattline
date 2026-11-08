@@ -98,6 +98,28 @@ void main() {
     expect(c.filter.intersection(Panda.polledIds).length, lessThan(8)); // a group or two
   }, timeout: slow);
 
+  // The basic layout's hidden cards: their ids are taken off the filter
+  // (streamed and polled alike), stay off as the wheel turns, and come back
+  // when shown, a streamed one at once.
+  test('skipped ids leave the filter and come back', () async {
+    final c = _Commander();
+    final p = Panda();
+    await p.connect('127.0.0.1', await c.start());
+    addTearDown(() async {
+      await p.disconnect();
+      c.stop();
+    });
+    await _wait(3.2);
+    expect(c.filter, containsAll([0x129, 0x101]));
+    p.skip = {0x129, 0x101, 0x3A1}; // streamed, streamed, polled
+    await _wait(9); // a whole round of the wheel
+    expect(c.filter.intersection({0x129, 0x101, 0x3A1}), isEmpty);
+    expect(c.filter.containsAll(Panda.alwaysOn.difference({0x129, 0x101})), isTrue);
+    p.skip = const {};
+    await _wait(0.3);
+    expect(c.filter, containsAll([0x129, 0x101]));
+  }, timeout: const Timeout(Duration(seconds: 30)));
+
   test('a new stream reads everything before the wheel turns', () async {
     final c = _Commander();
     var removes = 0;
