@@ -54,10 +54,9 @@ jobs:
       DEBUG_KEYSTORE: ${{ secrets.DEBUG_KEYSTORE }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: '17'
+      # The runner's own Java 17: setup-java's download (Adoptium) kept failing
+      # with 502/504 and sank the 1.0.2 and 1.0.3 builds.
+      - run: echo "JAVA_HOME=$JAVA_HOME_17_arm64" >> "$GITHUB_ENV"
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.47.4'
