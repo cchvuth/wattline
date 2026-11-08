@@ -191,6 +191,8 @@ class _RingPainter extends CustomPainter {
       final room = _deg(90) - (_right.start + _right.sweep) - _deg(10); // to the sector's end, less the gap
       final reach = room * v.brake.clamp(0, 100) / 100;
       canvas.drawArc(rect, _deg(90) - reach, 2 * reach, false, stroke(kAlert)..strokeWidth = w * 0.35);
+      _curved(canvas, c, r - w * 0.15, 'BRAKE APPLIED', TextStyle(
+          fontFamily: kFont, color: kAlert, fontSize: r * 0.042, fontWeight: FontWeight.w200, letterSpacing: r * 0.01));
     }
 
     // Rear: left sector, zero 15° below halfway, power climbing clockwise
@@ -255,6 +257,33 @@ class _RingPainter extends CustomPainter {
     } else {
       final s = negSpan * max(kw, minKw) / minKw;
       arc(up ? zero - s : zero, s, kRegen);
+    }
+  }
+
+  /// [text] centred on the ring's bottom, upright, curving with it: each
+  /// letter's foot on the circle of [radius], turned to its tangent.
+  static (String, TextStyle)? _glyphsFor;
+  static List<TextPainter> _glyphs = const [];
+  static void _curved(Canvas canvas, Offset c, double radius, String text, TextStyle style) {
+    // Laid out once per size: this paints up to 45 times a second.
+    if (_glyphsFor != (text, style)) {
+      _glyphsFor = (text, style);
+      _glyphs = [
+        for (final ch in text.split('')) TextPainter(text: TextSpan(text: ch, style: style), textDirection: TextDirection.ltr)..layout(),
+      ];
+    }
+    final glyphs = _glyphs;
+    final total = glyphs.fold(0.0, (a, g) => a + g.width);
+    var a = _deg(90) + total / 2 / radius; // left end: bottom-centre plus half the text
+    for (final g in glyphs) {
+      final mid = a - g.width / 2 / radius;
+      canvas
+        ..save()
+        ..translate(c.dx + radius * cos(mid), c.dy + radius * sin(mid))
+        ..rotate(mid - _deg(90));
+      g.paint(canvas, Offset(-g.width / 2, -g.height));
+      canvas.restore();
+      a -= g.width / radius;
     }
   }
 

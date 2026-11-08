@@ -135,8 +135,8 @@ class Panda extends ChangeNotifier {
   }
 
   /// The four wheels' brake torque the ring calls full braking, Nm.
-  /// ponytail: a guess (a 2 t car stopping at 0.6 g takes about 4000 Nm at
-  /// its wheels); set it from a hard stop's 'brake Nm=' in the trace.
+  /// About what a 2 t car stopping at 0.6 g takes at its wheels; with the
+  /// square root in [brakePct] it looked right in the car (2026-11-08).
   static const brakeFullNm = 4000.0;
   double? socPct;
   double? rangeMi;
