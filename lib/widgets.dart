@@ -1296,19 +1296,20 @@ class _SpeedLimit extends StatelessWidget {
 /// Slip Start or Off-Road Assist left on names itself (amber on a dry road).
 /// GRIP is WiFi only.
 class _Lights extends StatelessWidget {
-  const _Lights({required this.obd});
+  const _Lights({required this.obd, this.size = 1});
 
   final Panda obd;
+  final double size; // over the full layout's, as [_statRow]'s
 
   @override
   Widget build(BuildContext context) {
     final o = obd;
     Widget lamp(String label, Glyph icon, [Color lit = kRegen]) => Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 5),
+          padding: EdgeInsets.symmetric(horizontal: 5 * size),
           child: Column(children: [
-            GlyphIcon(icon, size: 20, color: lit),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 12, letterSpacing: 1, color: lit)),
+            GlyphIcon(icon, size: 20 * size, color: lit),
+            SizedBox(height: 2 * size),
+            Text(label, style: TextStyle(fontSize: 12 * size, letterSpacing: 1 * size, color: lit)),
           ]),
         );
     final grip = o.wifiLive && o.frames.containsKey(0x2B6) && (o.gripLit || o.tcMode != null);

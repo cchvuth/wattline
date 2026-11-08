@@ -1051,10 +1051,11 @@ class _DashPageState extends State<DashPage> {
           // bar under them took the rest), centred: the g-meter no bigger
           // than it was, room above and below.
           FractionallySizedBox(
-            heightFactor: 0.82,
+            heightFactor: 0.805,
             child: Column(children: [
-              // The lamps and grip on top (the assist state is by the ring).
-              _Lights(obd: o),
+              // The lamps and grip on top (the assist state is by the ring), at
+              // the figures' size.
+              _Lights(obd: o, size: small),
               const SizedBox(height: 6),
               // The g-meter (WiFi only), as big as the room.
               Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
