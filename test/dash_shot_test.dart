@@ -353,15 +353,17 @@ void main() {
     }
 
     final left = find.byType(PageView).first, right = find.byType(PageView).last;
-    // First cards: energy left (climate and the pack's health; 12 V, other
-    // power and imbalance only when switched on), the buttons right; no route
-    // in the bar.
+    // First cards: energy left (every draw and the pack's health: basic
+    // ignores the full layout's switch, off here), the buttons right; no
+    // route in the bar.
     expect(find.byType(PageView), findsNWidgets(2));
     expect(find.text('CLIMATE'), findsOneWidget);
     expect(find.text('DEGRADATION'), findsOneWidget);
-    expect(find.text('12 V'), findsNothing);
-    expect(find.text('IMBALANCE'), findsNothing);
+    expect(find.text('12 V'), findsOneWidget);
+    expect(find.text('0.6 kW'), findsOneWidget);
+    expect(find.text('IMBALANCE'), findsOneWidget);
     expect(find.text('Central Market'), findsNothing);
+    final basicPct = t.getRect(find.text('52%', findRichText: true)).height;
     expect(o.skip, basicSkip(0, 3)); // only what the ring and these two cards read
     // The assist state at the ring's top right, whichever cards show.
     final ring = t.getRect(find.byType(RingGauge));
@@ -389,7 +391,15 @@ void main() {
     await swipe(left, -2);
     await swipe(right, -4);
     expect(find.text('CLIMATE'), findsOneWidget);
+    // The car as tall as the card allows under its beams' room (it was 233
+    // with more room), its figures a quarter bigger again.
+    expect(t.getRect(find.image(const AssetImage('assets/car/car.png'))).height, greaterThan(255));
+    expect(t.getRect(find.text('38').first).height, greaterThan(19));
     await shot('basic-3');
+    // The battery dial as big on screen as in the full layout.
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
+    await t.pump(const Duration(milliseconds: 300));
+    expect(t.getRect(find.text('52%', findRichText: true)).height, closeTo(basicPct, 0.5));
     await t.pumpWidget(const SizedBox());
   });
 

@@ -314,7 +314,7 @@ class _CardsState extends State<_Cards> {
                 c is _Fill
                     ? LayoutBuilder(
                         builder: (context, box) => Padding(
-                            padding: pad.add(EdgeInsets.only(top: box.maxHeight * c.top)) as EdgeInsets,
+                            padding: EdgeInsets.fromLTRB(pad.left, box.maxHeight * c.top, pad.right, 0),
                             child: FittedBox(child: c.child)))
                     : Padding(
                         padding: pad,
@@ -1340,7 +1340,12 @@ class _CarLights extends CustomPainter {
     this.steerLines = false,
     this.reverse = false,
     this.beams = false,
+    this.reach = 1,
   });
+
+  /// The beams' length over their usual: basic's bigger car has less room
+  /// ahead of it to the screen's edge.
+  final double reach;
 
   /// In R: the path lines run out behind the car.
   final bool reverse;
@@ -1484,9 +1489,9 @@ class _CarLights extends CustomPainter {
       // Under the car: the beams and the bars' glow. The body hides the half
       // that would light it, and the glow fades round the bars' ends.
       if (high) {
-        cone(front, 0.38, 0.56); // further, brighter
+        cone(front, 0.38 * reach, 0.56); // further, brighter
       } else if (low) {
-        cone(front, 0.234, 0.35);
+        cone(front, 0.234 * reach, 0.35);
       }
       if (front_) canvas.drawPath(frontPath, line(Colors.white.withValues(alpha: 0.6), 3, 1.5));
       if (rear_) canvas.drawPath(rearPath, line(kAlert.withValues(alpha: brake ? 0.95 : 0.5), brake ? 6 : 3, brake ? 2.5 : 1.5));
@@ -1516,7 +1521,8 @@ class _CarLights extends CustomPainter {
       old.steerDeg != steerDeg ||
       old.steerLines != steerLines ||
       old.reverse != reverse ||
-      old.beams != beams;
+      old.beams != beams ||
+      old.reach != reach;
 }
 
 /// The car as it is, dark seats and all: what the car picker shows for each
@@ -1545,9 +1551,15 @@ class CarSeats extends StatelessWidget {
 /// it unbuckled (that row's figures then step aside). Not over Bluetooth,
 /// which has none of it; before the stream the saved pressures on the car.
 class _Cabin extends StatelessWidget {
-  const _Cabin({required this.obd});
+  const _Cabin({required this.obd, this.figures = 1, this.reach = 1});
 
   final Panda obd;
+
+  /// The tyre and seat figures' size, over the full layout's (basic: bigger).
+  final double figures;
+
+  /// The beams' length ([_CarLights.reach]).
+  final double reach;
 
   @override
   Widget build(BuildContext context) {
@@ -1567,45 +1579,54 @@ class _Cabin extends StatelessWidget {
     // A tyre's psi on the body over its wheel: between the outline and the
     // seats, as far in from each side (the mirrors make the image wider than
     // the body, the left more than the right).
+    // Bigger figures widen the box about its centre and shrink to it.
+    final f = figures, tyreOut = carW * _Car.tyreW * (f - 1) / 2;
     Widget tyre(double? bar, double at, bool left) => Positioned(
-          left: left ? carW * _Car.tyreL : null,
-          right: left ? null : carW * _Car.tyreR,
-          width: carW * _Car.tyreW,
-          top: carH * at - scale(15),
-          height: scale(30),
-          child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text(bar == null ? '—' : (bar * 14.5038).round().toString(),
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    height: 1.1,
-                    fontWeight: FontWeight.w600,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                    shadows: [Shadow(blurRadius: 3)])),
-            const Text('psi',
-                style: TextStyle(color: Colors.white60, fontSize: 9, height: 1, shadows: [Shadow(blurRadius: 3)])),
-          ]),
+          left: left ? carW * _Car.tyreL - tyreOut : null,
+          right: left ? null : carW * _Car.tyreR - tyreOut,
+          width: carW * _Car.tyreW * f,
+          top: carH * at - scale(15) * f,
+          height: scale(30) * f,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Text(bar == null ? '—' : (bar * 14.5038).round().toString(),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14 * f,
+                      height: 1.1,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      shadows: const [Shadow(blurRadius: 3)])),
+              Text('psi',
+                  style: TextStyle(color: Colors.white60, fontSize: 9 * f, height: 1, shadows: const [Shadow(blurRadius: 3)])),
+            ]),
+          ),
         );
     // A row's air and fan on a dark pill over its seats, centred on them.
     Widget row(double at, double c, [String? fan]) => Positioned(
           left: carW * _Car.pillL,
           width: carW * _Car.pillW,
-          top: carH * at - scale(fan == null ? 11 : 19),
-          height: scale(fan == null ? 22 : 38),
+          top: carH * at - scale(fan == null ? 11 : 19) * f,
+          height: scale(fan == null ? 22 : 38) * f,
+          // Shrinks, never overflows, should a long fan word meet big figures.
           child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-              decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text('${c.round()}°',
-                    style: const TextStyle(fontSize: 16, height: 1.1, fontWeight: FontWeight.w600, color: Colors.white)),
-                if (fan != null)
-                  Row(mainAxisSize: MainAxisSize.min, children: [
-                    GlyphIcon(fan == 'OFF' ? Glyph.fanOff : Glyph.fan, size: 12, color: Colors.white70),
-                    if (fan != 'OFF')
-                      Text(' $fan', style: const TextStyle(fontSize: 11, height: 1.1, color: Colors.white70)),
-                  ]),
-              ]),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text('${c.round()}°',
+                      style: TextStyle(fontSize: 16 * f, height: 1.1, fontWeight: FontWeight.w600, color: Colors.white)),
+                  if (fan != null)
+                    Row(mainAxisSize: MainAxisSize.min, children: [
+                      GlyphIcon(fan == 'OFF' ? Glyph.fanOff : Glyph.fan, size: 12 * f, color: Colors.white70),
+                      if (fan != 'OFF')
+                        Text(' $fan', style: TextStyle(fontSize: 11 * f, height: 1.1, color: Colors.white70)),
+                    ]),
+                ]),
+              ),
             ),
           ),
         );
@@ -1628,7 +1649,8 @@ class _Cabin extends StatelessWidget {
                   steerDeg: o.steerDeg,
                   steerLines: o.steerLines,
                   reverse: o.gear == 'R',
-                  beams: true)),
+                  beams: true,
+                  reach: reach)),
         Image.asset('$dir/car.png', fit: BoxFit.fill),
         if (live)
           for (final s in _Car.seats(o.thirdRow))

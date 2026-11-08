@@ -111,7 +111,7 @@ class _DashPageState extends State<DashPage> {
   int _settleMs = 3000, _buttonsMs = 500, _rejoinMs = 2000, _backMs = 15000;
   bool _wifiFirst = true; // Bluetooth waits for the WiFi stream, however long
   bool _smooth = false; // the power ring and pedal line glide on every change
-  bool _minor = false; // 12 V, other power and cell imbalance shown (off by default)
+  bool _minor = false; // the full layout's 12 V, other power and cell imbalance (off by default; basic shows them)
   late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
   int _cardLeft = 0, _cardRight = 3; // the card each side shows: energy, the buttons
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
@@ -1015,13 +1015,15 @@ class _DashPageState extends State<DashPage> {
   Widget _basicRow(Panda o) {
     List<Widget> cards() => [
           Column(children: [
-            // Four-fifths of the card's width at most: the dial, not a wall.
-            Expanded(child: FractionallySizedBox(widthFactor: 0.8, child: FittedBox(child: _Battery(obd: o)))),
+            // The dial as big on screen as in the full layout: next to the
+            // ring, not bigger than it.
+            Expanded(child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: _Battery(obd: o, width: 128 / _CardsState._scale)))),
             const SizedBox(height: 8),
-            // The draws and the pack's health in one column, the values lined up.
+            // The draws and the pack's health in one column, the values lined
+            // up; all of them here, whatever the full layout's switch says.
             Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o, minor: _minor),
-              _Pack(obd: o, outside: false, minor: _minor),
+              if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
+              _Pack(obd: o, outside: false),
             ]),
           ]),
           Column(children: [
@@ -1034,7 +1036,10 @@ class _DashPageState extends State<DashPage> {
             // The air outside.
             _Pack(obd: o, pack: false),
           ]),
-          _Fill(_Cabin(obd: o), top: 0.14),
+          // The car as big as the card allows, under a little room for its
+          // beams (drawn shorter here, so the low beam shows whole), its
+          // figures a quarter bigger.
+          _Fill(_Cabin(obd: o, figures: 1.25, reach: 0.8), top: 0.08),
           _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),

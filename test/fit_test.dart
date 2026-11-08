@@ -201,13 +201,19 @@ void main() {
     expect(wifi.lookMs, look); // what the Android look waits, at its next run
     await slide('Bluetooth buttons after WiFi is live', 400); // all the way up
     expect(find.text('Bluetooth buttons after WiFi is live: 10.0 s'), findsOneWidget);
-    // Basic layout: off unless switched on, and kept.
+    // Basic layout: off unless switched on, and kept; back off, for the
+    // full layout's switch below (basic shows those figures whatever it says).
     final basic = find.byType(Switch).at(1);
     expect(t.widget<Switch>(basic).value, isFalse);
     await t.ensureVisible(basic);
     await t.tap(basic);
     await _frames(t);
     expect(prefs.getBool('basic'), isTrue);
+    expect(find.byType(PageView), findsNWidgets(2));
+    await t.tap(basic);
+    await _frames(t);
+    expect(prefs.getBool('basic'), isFalse);
+    expect(find.byType(PageView), findsNothing);
     // The power ring's glide: off unless switched on, and kept.
     expect(find.text('Smooth power ring (more battery)'), findsOneWidget);
     final smooth = find.byType(Switch).at(2);
@@ -217,8 +223,8 @@ void main() {
     await _frames(t);
     expect(t.widget<Switch>(smooth).value, isTrue);
     expect(prefs.getBool('smoothRing'), isTrue);
-    // 12 V, other power and the cell imbalance: hidden unless switched on,
-    // kept, and on the dash at once.
+    // The full layout's 12 V, other power and cell imbalance: hidden unless
+    // switched on, kept, and on the dash at once.
     final minor = find.byType(Switch).at(3);
     expect(t.widget<Switch>(minor).value, isFalse);
     expect(find.text('IMBALANCE'), findsNothing);
