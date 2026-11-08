@@ -138,8 +138,11 @@ class _SideColumn extends StatelessWidget {
 }
 
 /// Basic layout's stack of cards beside the ring: one shows, filling the
-/// side, its content scaled up to fit; a swipe up or down brings the next,
-/// and dots at the side say which.
+/// side; a swipe up or down brings the next, and dots at the side say
+/// which. Every card's content is scaled up by the same [_scale], so text
+/// is one size across cards (one too big for that shrinks to fit); a
+/// [_Fill] card, a picture, is as large as its card allows.
+/// ponytail: one fixed scale, set for the S23 Ultra's 823 x 384 dp.
 class _Cards extends StatefulWidget {
   const _Cards({super.key, required this.cards});
 
@@ -150,6 +153,7 @@ class _Cards extends StatefulWidget {
 }
 
 class _CardsState extends State<_Cards> {
+  static const _scale = 1.18; // the tallest card, the figures, just fits
   int _page = 0;
 
   @override
@@ -165,10 +169,21 @@ class _CardsState extends State<_Cards> {
             onPageChanged: (p) => setState(() => _page = p),
             children: [
               for (final c in widget.cards)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 22, 14),
-                  child: FittedBox(child: c),
-                ),
+                c is _Fill
+                    ? Padding(padding: const EdgeInsets.fromLTRB(4, 4, 16, 4), child: FittedBox(child: c.child))
+                    : Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 6, 20, 6),
+                        child: LayoutBuilder(
+                          builder: (context, box) => FittedBox(
+                            fit: BoxFit.fill,
+                            child: SizedBox(
+                              width: box.maxWidth / _scale,
+                              height: box.maxHeight / _scale,
+                              child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: c)),
+                            ),
+                          ),
+                        ),
+                      ),
             ],
           ),
           Positioned(
@@ -187,6 +202,16 @@ class _CardsState extends State<_Cards> {
           ),
         ]),
       );
+}
+
+/// A card of [_Cards] that fills it, as large as it fits.
+class _Fill extends StatelessWidget {
+  const _Fill(this.child);
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => child;
 }
 
 /// The route the car is driving, along the foot of the dash: time to go,
@@ -241,15 +266,15 @@ class _Nav extends StatelessWidget {
     // Lines set tight: with the destination the two still fit the bar's
     // height at the text cap, so the ring keeps its size as a route comes
     // and goes.
-    const big = TextStyle(
-        fontSize: 18, height: 1.1, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]);
+    final big = TextStyle(
+        fontSize: tall ? 16 : 18, height: 1.1, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]);
     final togo = m < 1 ? '<1 min' : m < 60 ? '$m min' : '${m ~/ 60}h ${m % 60}m';
     // The arrival clock, in the phone's 12 or 24 hour format.
     final clock = TimeOfDay.fromDateTime(
             DateTime.now().add(Duration(seconds: (mins * 60).round())))
         .format(context);
     // Every value after its icon; [note]: a smaller grey figure after it.
-    Widget stat(IconData icon, String text, {TextStyle style = big, String? note}) =>
+    Widget stat(IconData icon, String text, {TextStyle? style, String? note}) =>
         Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(icon, size: 15, color: Colors.white70),
           const SizedBox(width: 4),
@@ -258,7 +283,7 @@ class _Nav extends StatelessWidget {
                 if (note != null)
                   TextSpan(text: note, style: const TextStyle(fontSize: 14, color: Colors.white54)),
               ]),
-              style: style),
+              style: style ?? big),
         ]);
     final battery = energy == null
         ? null

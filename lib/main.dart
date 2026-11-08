@@ -930,7 +930,8 @@ class _DashPageState extends State<DashPage> {
 
   /// The basic layout: the ring between two stacks of cards, one card of
   /// each showing, swiped up or down for the next. Left the car's figures
-  /// and the car itself; right the buttons and the route.
+  /// and lamps, and the car itself as large as it fits; right the buttons
+  /// and the route.
   Widget _basicRow(Panda o) => Row(children: [
         Expanded(child: _Cards(key: const ValueKey('left'), cards: [
           Column(mainAxisSize: MainAxisSize.min, children: [
@@ -938,8 +939,11 @@ class _DashPageState extends State<DashPage> {
             _Battery(obd: o),
             const SizedBox(height: 10),
             if (o.wifiLive && o.charging) _Charge(obd: o) else _Pack(obd: o),
+            // The lamps' words here: the car card keeps its height for the car.
+            const SizedBox(height: 8),
+            _Lights(obd: o),
           ]),
-          Column(mainAxisSize: MainAxisSize.min, children: [_Lights(obd: o), _Cabin(obd: o)]),
+          _Fill(_Cabin(obd: o)),
         ])),
         _ring(o),
         Expanded(child: _Cards(key: const ValueKey('right'), cards: [
