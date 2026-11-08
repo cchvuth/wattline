@@ -386,6 +386,9 @@ void main() {
     await swipe(right, 1);
     expect(find.textContaining('PEAK'), findsOneWidget);
     expect(find.text('OUTSIDE'), findsOneWidget);
+    // The g-meter no bigger than before the cards ran the screen's height.
+    final ball = t.getRect(find.byWidgetPredicate((w) => w is CustomPaint && w.painter.runtimeType.toString() == '_GPainter'));
+    expect(ball.height, closeTo(161, 4));
     expect(find.text('9 min'), findsOneWidget);
     // At arrival: the battery, and what the route takes of it now (52 %).
     expect(find.text('47% −5', findRichText: true), findsOneWidget);

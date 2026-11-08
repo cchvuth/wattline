@@ -1047,16 +1047,22 @@ class _DashPageState extends State<DashPage> {
               _Pack(obd: o, outside: false, size: small),
             ]),
           ]),
-          Column(children: [
-            // The lamps and grip on top (the assist state is by the ring).
-            _Lights(obd: o),
-            const SizedBox(height: 6),
-            // The g-meter (WiFi only), as big as the room.
-            Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
-            const SizedBox(height: 6),
-            // The air outside.
-            _Pack(obd: o, pack: false, size: small),
-          ]),
+          // In the height it had before the cards ran the screen's height (the
+          // bar under them took the rest), centred: the g-meter no bigger
+          // than it was, room above and below.
+          FractionallySizedBox(
+            heightFactor: 0.82,
+            child: Column(children: [
+              // The lamps and grip on top (the assist state is by the ring).
+              _Lights(obd: o),
+              const SizedBox(height: 6),
+              // The g-meter (WiFi only), as big as the room.
+              Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
+              const SizedBox(height: 6),
+              // The air outside.
+              _Pack(obd: o, pack: false, size: small),
+            ]),
+          ),
           // The car, low going forward and high in reverse ([_BasicCar]).
           _Fill((height) => _BasicCar(obd: o, height: height)),
           _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
