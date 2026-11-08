@@ -353,12 +353,14 @@ void main() {
     }
 
     final left = find.byType(PageView).first, right = find.byType(PageView).last;
-    // First cards: energy left (the 12 V draw, the pack's health), the
-    // buttons right; no route in the bar.
+    // First cards: energy left (climate and the pack's health; 12 V, other
+    // power and imbalance only when switched on), the buttons right; no route
+    // in the bar.
     expect(find.byType(PageView), findsNWidgets(2));
     expect(find.text('CLIMATE'), findsOneWidget);
-    expect(find.text('0.6 kW'), findsOneWidget);
-    expect(find.text('IMBALANCE'), findsOneWidget);
+    expect(find.text('DEGRADATION'), findsOneWidget);
+    expect(find.text('12 V'), findsNothing);
+    expect(find.text('IMBALANCE'), findsNothing);
     expect(find.text('Central Market'), findsNothing);
     expect(o.skip, basicSkip(0, 3)); // only what the ring and these two cards read
     // The assist state at the ring's top right, whichever cards show.
@@ -394,9 +396,9 @@ void main() {
   // The assist state as the car's wheel on a disc at the ring's top right:
   // grey ready, blue steering, flashing amber for the hands-on nag (the wheel
   // dark on it), red and still once Autopilot is locked out. The air outside
-  // at the ring's bottom left; the right column reads g-meter, battery, then
-  // the pack's figures.
-  testWidgets('full layout: the Autopilot icon and the air outside by the ring, g-meter over the battery', (t) async {
+  // at the ring's bottom left; the right column reads battery, the pack's
+  // figures, then the g-meter.
+  testWidgets('full layout: the Autopilot icon and the air outside by the ring, the g-meter under the figures', (t) async {
     t.view
       ..physicalSize = const Size(823, 384)
       ..devicePixelRatio = 1;
@@ -429,9 +431,12 @@ void main() {
     expect(t.getSize(find.byTooltip('AP READY')), const Size(30, 30));
     expect((icon - ring.center).distance - 15, greaterThan(r));
     expect((t.getRect(find.text('OUTSIDE')).topRight - ring.center).distance, greaterThan(r));
-    // The g-meter over the battery dial, the pack's figures under it.
-    expect(t.getCenter(find.textContaining('PEAK')).dy, lessThan(t.getCenter(find.text('64%', findRichText: true)).dy));
-    expect(t.getCenter(find.text('IMBALANCE')).dy, greaterThan(t.getCenter(find.text('64%', findRichText: true)).dy));
+    // The battery dial on top, the pack's figures under it, the g-meter
+    // under them.
+    final dial = t.getCenter(find.text('64%', findRichText: true)).dy;
+    final figures = t.getCenter(find.text('DEGRADATION')).dy;
+    expect(dial, lessThan(figures));
+    expect(figures, lessThan(t.getCenter(find.textContaining('PEAK')).dy));
     o
       ..autopilot = 'AUTOPILOT'
       ..notifyListeners();

@@ -111,7 +111,7 @@ class _DashPageState extends State<DashPage> {
   int _settleMs = 3000, _buttonsMs = 500, _rejoinMs = 2000, _backMs = 15000;
   bool _wifiFirst = true; // Bluetooth waits for the WiFi stream, however long
   bool _smooth = false; // the power ring and pedal line glide on every change
-  bool _minor = true; // 12 V, other power and cell imbalance shown
+  bool _minor = false; // 12 V, other power and cell imbalance shown (off by default)
   late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
   int _cardLeft = 0, _cardRight = 3; // the card each side shows: energy, the buttons
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
@@ -1134,33 +1134,28 @@ class _DashPageState extends State<DashPage> {
                           ),
                         ),
                         _ring(o, outside: true),
-                        // The g-meter and the pack's figures pinned top and
-                        // bottom, the battery dial large between them. The g-meter's
-                        // top is level with the first button's, its place kept
-                        // while it has nothing to say (parked it only reads 0;
-                        // no WiFi, no reading), so the dial does not jump.
+                        // The battery dial and the g-meter pinned top and
+                        // bottom, the pack's figures between them: the dial's
+                        // top level with the first button's; the g-meter's
+                        // place kept while it has nothing to say (parked it
+                        // only reads 0; no WiFi, no reading), so the figures
+                        // do not jump. Charging, the charge over the figures.
                         Expanded(child: Column(children: [
+                          Padding(padding: const EdgeInsets.fromLTRB(8, 14, 8, 0), child: _Battery(obd: o, width: 128)),
+                          Expanded(child: _SideColumn(children: [
+                            if (o.wifiLive && o.charging) _Charge(obd: o),
+                            // What the pack feeds besides the motors (WiFi),
+                            // and its health; the air outside is by the ring.
+                            Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                              if (o.wifiLive && o.otherKw != null) _Draws(obd: o, minor: _minor),
+                              _Pack(obd: o, outside: false, minor: _minor),
+                            ]),
+                          ])),
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 14, 8, 0),
+                            padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
                             child: Visibility.maintain(
                               visible: o.wifiLive && !o.charging && o.gear != 'P' && (o.gLong != null || o.gLat != null),
                               child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o)),
-                            ),
-                          ),
-                          Expanded(child: _SideColumn(children: [
-                            _Battery(obd: o, width: 128),
-                            if (o.wifiLive && o.charging) _Charge(obd: o),
-                          ])),
-                          // What the pack feeds besides the motors (WiFi), and
-                          // its health; the air outside is by the ring.
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                                if (o.wifiLive && o.otherKw != null) _Draws(obd: o, minor: _minor),
-                                _Pack(obd: o, outside: false, minor: _minor),
-                              ]),
                             ),
                           ),
                         ])),

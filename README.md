@@ -29,9 +29,10 @@ It shows:
   the indicators in amber), and grip, each only while on: the car's
   slippery-road verdict and traction or stability control stepping in
   (both while moving), Slip Start left on;
-- the outside temperature (ice blue near freezing), washer fluid low, cell
-  imbalance and degradation; the pack's coldest cells and whether it is
-  heating over the battery %;
+- the outside temperature (ice blue near freezing), washer fluid low, the
+  climate's power draw and degradation; the pack's coldest cells and whether
+  it is heating over the battery % (a settings switch adds 12 V and other
+  power and the cell imbalance);
 - the route along the bottom: time to go and arrival time, the energy
   and range it uses, and battery and range at arrival (plus its length and
   the destination when the Commander has them);
