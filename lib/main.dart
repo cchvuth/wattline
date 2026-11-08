@@ -88,6 +88,7 @@ class _DashPageState extends State<DashPage> {
   bool _wifiFirst = true; // Bluetooth waits for the WiFi stream, however long
   bool _smooth = false; // the power ring and pedal line glide on every change
   late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
+  int _cardLeft = 0, _cardRight = 2; // the card each side shows: the figures, the buttons
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
   int _lookMs = 3000; // the slider's look time; with the switch on the look has none
 
@@ -126,6 +127,8 @@ class _DashPageState extends State<DashPage> {
     _wifiFirst = prefs.getBool('btWifiFirst') ?? _wifiFirst;
     _smooth = prefs.getBool('smoothRing') ?? _smooth;
     _basic = prefs.getBool('basic') ?? _basic;
+    _cardLeft = prefs.getInt('cardLeft') ?? _cardLeft;
+    _cardRight = prefs.getInt('cardRight') ?? _cardRight;
     _sparse = prefs.getBool('sparsePolling') ?? _sparse;
     _obd
       ..sparse = _sparse
@@ -929,11 +932,11 @@ class _DashPageState extends State<DashPage> {
       );
 
   /// The basic layout: the ring between two stacks of cards, one card of
-  /// each showing, swiped up or down for the next. Left the car's figures
-  /// and lamps, and the car itself as large as it fits; right the buttons
-  /// and the route.
-  Widget _basicRow(Panda o) => Row(children: [
-        Expanded(child: _Cards(key: const ValueKey('left'), cards: [
+  /// each showing, swiped up or down for the next. Both stacks hold all four
+  /// cards (the figures and lamps, the car as large as it fits, the
+  /// buttons, the route), so either side shows any; each side's card is kept.
+  Widget _basicRow(Panda o) {
+    List<Widget> cards() => [
           Column(mainAxisSize: MainAxisSize.min, children: [
             if (_autopilot(o) case final ap?) Padding(padding: const EdgeInsets.only(bottom: 10), child: ap),
             _Battery(obd: o),
@@ -944,16 +947,21 @@ class _DashPageState extends State<DashPage> {
             _Lights(obd: o),
           ]),
           _Fill(_Cabin(obd: o)),
-        ])),
-        _ring(o),
-        Expanded(child: _Cards(key: const ValueKey('right'), cards: [
           Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),
           ]),
           _Nav(obd: o, bt: _bt, tall: true),
-        ])),
-      ]);
+        ];
+    Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
+    return Row(children: [
+      Expanded(child: _Cards(key: const ValueKey('left'), cards: cards(), initial: _cardLeft,
+          onPage: (p) => keep('cardLeft', _cardLeft = p))),
+      _ring(o),
+      Expanded(child: _Cards(key: const ValueKey('right'), cards: cards(), initial: _cardRight,
+          onPage: (p) => keep('cardRight', _cardRight = p))),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {

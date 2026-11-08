@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tesla_dash/commander.dart';
 import 'package:tesla_dash/gauge.dart';
 import 'package:tesla_dash/main.dart';
@@ -299,6 +300,7 @@ void main() {
   // The basic layout: the ring between two stacks of cards, one card of
   // each showing; a swipe up brings the next. DASH_SHOT writes both views.
   testWidgets('basic layout: cards beside the ring, swiped', (t) async {
+    SharedPreferences.setMockInitialValues({});
     t.view
       ..physicalSize = const Size(823.5, 384) * _dpr
       ..devicePixelRatio = _dpr;
@@ -352,6 +354,16 @@ void main() {
     await t.pump();
     expect(find.text('Central Market'), findsOneWidget);
     await shot('basic-2');
+    // Every card on either side: the left stack on to the route as well.
+    final left = find.byType(PageView).first;
+    for (var i = 0; i < 2; i++) {
+      await t.drag(left, const Offset(0, -300));
+      await t.pumpAndSettle();
+    }
+    expect(find.text('Central Market'), findsNWidgets(2));
+    // Each side's card is kept for the next start.
+    final prefs = await SharedPreferences.getInstance();
+    expect((prefs.getInt('cardLeft'), prefs.getInt('cardRight')), (3, 3));
     await t.pumpWidget(const SizedBox());
   });
 

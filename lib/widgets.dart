@@ -144,9 +144,11 @@ class _SideColumn extends StatelessWidget {
 /// [_Fill] card, a picture, is as large as its card allows.
 /// ponytail: one fixed scale, set for the S23 Ultra's 823 x 384 dp.
 class _Cards extends StatefulWidget {
-  const _Cards({super.key, required this.cards});
+  const _Cards({super.key, required this.cards, this.initial = 0, this.onPage});
 
   final List<Widget> cards;
+  final int initial; // the card shown first
+  final ValueChanged<int>? onPage;
 
   @override
   State<_Cards> createState() => _CardsState();
@@ -154,7 +156,14 @@ class _Cards extends StatefulWidget {
 
 class _CardsState extends State<_Cards> {
   static const _scale = 1.18; // the tallest card, the figures, just fits
-  int _page = 0;
+  late int _page = widget.initial.clamp(0, widget.cards.length - 1);
+  late final _ctrl = PageController(initialPage: _page);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) => Container(
@@ -165,8 +174,12 @@ class _CardsState extends State<_Cards> {
         ),
         child: Stack(children: [
           PageView(
+            controller: _ctrl,
             scrollDirection: Axis.vertical,
-            onPageChanged: (p) => setState(() => _page = p),
+            onPageChanged: (p) {
+              setState(() => _page = p);
+              widget.onPage?.call(p);
+            },
             children: [
               for (final c in widget.cards)
                 c is _Fill
