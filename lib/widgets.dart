@@ -139,9 +139,11 @@ class _SideColumn extends StatelessWidget {
 
 /// Basic layout's stack of cards beside the ring: one shows, filling the
 /// side; a swipe up or down brings the next, and dots at the side say
-/// which. Every card's content is scaled up by the same [_scale], so text
-/// is one size across cards (one too big for that shrinks to fit); a
-/// [_Fill] card, a picture, is as large as its card allows.
+/// which. Every card is laid out in its card's size over [_scale] and then
+/// scaled up by it, so text is one size across cards; a card fills that box
+/// itself (a graphic takes the room its text leaves; [_fit] centres
+/// fixed-size content, shrunk only if too big). A [_Fill] card, a picture,
+/// is as large as its card allows.
 /// ponytail: one fixed scale, set for the S23 Ultra's 823 x 384 dp.
 class _Cards extends StatefulWidget {
   const _Cards({super.key, required this.cards, this.initial = 0, this.onPage});
@@ -155,7 +157,7 @@ class _Cards extends StatefulWidget {
 }
 
 class _CardsState extends State<_Cards> {
-  static const _scale = 1.18; // the tallest card, the figures, just fits
+  static const _scale = 1.22; // every card's text, over the full layout's: the widest row (a label and its value) just fits
   late int _page = widget.initial.clamp(0, widget.cards.length - 1);
   late final _ctrl = PageController(initialPage: _page);
 
@@ -185,15 +187,11 @@ class _CardsState extends State<_Cards> {
                 c is _Fill
                     ? Padding(padding: const EdgeInsets.fromLTRB(4, 4, 16, 4), child: FittedBox(child: c.child))
                     : Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 6, 20, 6),
+                        padding: const EdgeInsets.fromLTRB(8, 6, 14, 6),
                         child: LayoutBuilder(
                           builder: (context, box) => FittedBox(
                             fit: BoxFit.fill,
-                            child: SizedBox(
-                              width: box.maxWidth / _scale,
-                              height: box.maxHeight / _scale,
-                              child: Center(child: FittedBox(fit: BoxFit.scaleDown, child: c)),
-                            ),
+                            child: SizedBox(width: box.maxWidth / _scale, height: box.maxHeight / _scale, child: c),
                           ),
                         ),
                       ),
@@ -216,6 +214,12 @@ class _CardsState extends State<_Cards> {
         ]),
       );
 }
+
+/// Fixed-size content centred on a card, shrunk only if it does not fit.
+Widget _fit(Widget child) => Center(child: FittedBox(fit: BoxFit.scaleDown, child: child));
+
+/// A graphic that grows to the room it has.
+Widget _grow(Widget child) => Expanded(child: FittedBox(child: child));
 
 /// A card of [_Cards] that fills it, as large as it fits.
 class _Fill extends StatelessWidget {
@@ -941,9 +945,10 @@ class _DialPainter extends CustomPainter {
 /// driver (up braking, down speeding up, right in a left turn), its figure
 /// beside it and this drive's peak under that. WiFi only.
 class _GBall extends StatefulWidget {
-  const _GBall({required this.obd});
+  const _GBall({required this.obd, this.tall = false});
 
   final Panda obd;
+  final bool tall; // basic's card: the ball as big as the room, the figures under it
 
   @override
   State<_GBall> createState() => _GBallState();
@@ -960,13 +965,8 @@ class _GBallState extends State<_GBall> {
     _trail.add(g);
     if (_trail.length > 10) _trail.removeAt(0);
     final peak = max(o.gMaxBrake, max(o.gMaxAccel, o.gMaxLat));
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      SizedBox.square(
-        dimension: 72,
-        child: CustomPaint(painter: _GPainter(List.of(_trail), (o.gMaxBrake, o.gMaxAccel, o.gMaxLat))),
-      ),
-      const SizedBox(width: 12),
-      Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+    final ball = CustomPaint(painter: _GPainter(List.of(_trail), (o.gMaxBrake, o.gMaxAccel, o.gMaxLat)));
+    final figures = [
         Text.rich(
             TextSpan(text: g.distance.toStringAsFixed(2), children: const [
               TextSpan(text: ' g', style: TextStyle(fontSize: 14, color: Colors.white70)),
@@ -975,7 +975,19 @@ class _GBallState extends State<_GBall> {
                 fontSize: 20, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()])),
         Text('PEAK ${peak.toStringAsFixed(2)}',
             style: const TextStyle(fontSize: 12, letterSpacing: 0.8, color: Colors.white70)),
-      ]),
+    ];
+    if (widget.tall) {
+      return Column(children: [
+        Expanded(child: Center(child: AspectRatio(aspectRatio: 1, child: ball))),
+        const SizedBox(height: 6),
+        Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic, spacing: 12, children: figures),
+      ]);
+    }
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      SizedBox.square(dimension: 72, child: ball),
+      const SizedBox(width: 12),
+      Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: figures),
     ]);
   }
 }
@@ -1031,34 +1043,39 @@ class _GPainter extends CustomPainter {
 /// pack's own temperature is in the battery dial); then the spread between the strongest and weakest cell
 /// group, and how far full-pack energy has fallen from the BMS's figure for
 /// it new.
+/// A label and its value, the labels one width so the values line up.
+Widget _statRow(BuildContext context, String label, String value, {Color color = Colors.white}) =>
+    Row(mainAxisSize: MainAxisSize.min, children: [
+      SizedBox(
+        width: MediaQuery.textScalerOf(context).scale(104), // aligns the values
+        child: Text(label,
+            maxLines: 1, softWrap: false, style: const TextStyle(fontSize: 12, letterSpacing: 0.8, color: Colors.white70)),
+      ),
+      Text(value, style: TextStyle(fontSize: 16, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
+    ]);
+
 class _Pack extends StatelessWidget {
-  const _Pack({required this.obd});
+  const _Pack({required this.obd, this.outside = true, this.pack = true});
 
   final Panda obd;
+  final bool outside, pack; // the air outside (and washer), the pack's health
 
   @override
   Widget build(BuildContext context) {
     final o = obd, mv = o.imbalanceMv;
     final kwh = o.packKwh, isNew = o.packNewKwh;
     final out = o.outsideC;
-    Widget row(String label, String value, {Color color = Colors.white}) =>
-        Row(mainAxisSize: MainAxisSize.min, children: [
-          SizedBox(
-            width: MediaQuery.textScalerOf(context).scale(104), // aligns the values
-            child: Text(label,
-                maxLines: 1,
-                softWrap: false,
-                style: const TextStyle(
-                    fontSize: 12, letterSpacing: 0.8, color: Colors.white70)),
-          ),
-          Text(value, style: TextStyle(fontSize: 16, color: color)),
-        ]);
+    Widget row(String label, String value, {Color color = Colors.white}) => _statRow(context, label, value, color: color);
     // Shrinks rather than overflows when a large font meets a wide ring.
     return FittedBox(fit: BoxFit.scaleDown, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      row('OUTSIDE', out == null ? '—' : _deg(out), color: out != null && out <= 3 ? kCold : Colors.white),
-      if (o.wifiLive && o.washerLow) row('WASHER', 'LOW', color: kWarn),
-      row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
-      row('DEGRADATION', kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
+      if (outside) ...[
+        row('OUTSIDE', out == null ? '—' : _deg(out), color: out != null && out <= 3 ? kCold : Colors.white),
+        if (o.wifiLive && o.washerLow) row('WASHER', 'LOW', color: kWarn),
+      ],
+      if (pack) ...[
+        row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
+        row('DEGRADATION', kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
+      ],
     ]));
   }
 }
@@ -1590,22 +1607,11 @@ class _Draws extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final o = obd, live = o.wifiLive;
-    Widget row(String label, double? kw) => Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox(
-                width: 90,
-                child: Text(label, style: const TextStyle(fontSize: 12, letterSpacing: 0.8, color: Colors.white70))),
-            Text(!live || kw == null ? '—' : '${kw.toStringAsFixed(1)} kW',
-                style: const TextStyle(fontSize: 16, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()])),
-          ]),
-        );
+    String kw(double? v) => !live || v == null ? '—' : '${v.toStringAsFixed(1)} kW';
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('POWER USE', style: TextStyle(fontSize: 11, letterSpacing: 1.5, color: Colors.white54)),
-      const SizedBox(height: 6),
-      row('CLIMATE', o.climateKw),
-      row('12 V', o.lvKw),
-      row('OTHER', o.otherKw),
+      _statRow(context, 'CLIMATE', kw(o.climateKw)),
+      _statRow(context, '12 V', kw(o.lvKw)),
+      _statRow(context, 'OTHER', kw(o.otherKw)),
     ]);
   }
 }

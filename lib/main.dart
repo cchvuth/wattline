@@ -88,7 +88,7 @@ class _DashPageState extends State<DashPage> {
   bool _wifiFirst = true; // Bluetooth waits for the WiFi stream, however long
   bool _smooth = false; // the power ring and pedal line glide on every change
   late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
-  int _cardLeft = 0, _cardRight = 2; // the card each side shows: the figures, the buttons
+  int _cardLeft = 0, _cardRight = 3; // the card each side shows: energy, the buttons
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
   int _lookMs = 3000; // the slider's look time; with the switch on the look has none
 
@@ -932,30 +932,38 @@ class _DashPageState extends State<DashPage> {
       );
 
   /// The basic layout: the ring between two stacks of cards, one card of
-  /// each showing, swiped up or down for the next. Both stacks hold every
-  /// card (the figures and lamps, the car as large as it fits, the buttons,
-  /// the route, the g-meter, the pack's other draws), so either side shows
-  /// any; each side's card is kept.
+  /// each showing, swiped up or down for the next. Each card answers one
+  /// question, its graphic taking the room its text leaves: energy (the
+  /// battery, what the pack feeds besides the motors or the charge, the
+  /// pack's health), the drive (assist, g-meter, lamps, the air outside),
+  /// the car as large as it fits, the buttons, the route. Both stacks hold
+  /// every card, so either side shows any; each side's card is kept.
   Widget _basicRow(Panda o) {
     List<Widget> cards() => [
-          Column(mainAxisSize: MainAxisSize.min, children: [
-            if (_autopilot(o) case final ap?) Padding(padding: const EdgeInsets.only(bottom: 10), child: ap),
-            _Battery(obd: o),
-            const SizedBox(height: 10),
-            if (o.wifiLive && o.charging) _Charge(obd: o) else _Pack(obd: o),
-            // The lamps' words here: the car card keeps its height for the car.
+          Column(children: [
+            _grow(_Battery(obd: o)),
             const SizedBox(height: 8),
+            // The draws and the pack's health in one column, the values lined up.
+            Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
+              _Pack(obd: o, outside: false),
+            ]),
+          ]),
+          Column(children: [
+            ?_autopilot(o),
+            const SizedBox(height: 6),
+            // The g-meter (WiFi only), as big as the room.
+            Expanded(child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o, tall: true))),
+            const SizedBox(height: 6),
             _Lights(obd: o),
+            _Pack(obd: o, pack: false),
           ]),
           _Fill(_Cabin(obd: o, draws: false)),
-          Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
+          _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),
-          ]),
-          _Nav(obd: o, bt: _bt, tall: true),
-          // The g-meter (WiFi only), then the pack's other draws.
-          ListenableBuilder(listenable: o.fast, builder: (context, _) => _GBall(obd: o)),
-          _Draws(obd: o),
+          ])),
+          _fit(_Nav(obd: o, bt: _bt, tall: true)),
         ];
     Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
     return Row(children: [

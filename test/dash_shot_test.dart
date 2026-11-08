@@ -339,43 +339,43 @@ void main() {
       });
     }
 
-    // First cards: the figures left, the buttons right; no route in the bar.
-    expect(find.text('OUTSIDE'), findsOneWidget);
+    Future<void> swipe(Finder stack, int cards) async {
+      for (var i = 0; i < cards.abs(); i++) {
+        await t.drag(stack, Offset(0, cards > 0 ? -300 : 300));
+        await t.pumpAndSettle();
+      }
+      await t.runAsync(() => Future.wait([
+            for (final e in find.byType(Image).evaluate()) precacheImage((e.widget as Image).image, e),
+          ]));
+      await t.pump();
+    }
+
+    final left = find.byType(PageView).first, right = find.byType(PageView).last;
+    // First cards: energy left (with the 12 V draw and the pack's health),
+    // the buttons right; no route in the bar.
     expect(find.byType(PageView), findsNWidgets(2));
+    expect(find.text('CLIMATE'), findsOneWidget);
+    expect(find.text('0.6 kW'), findsOneWidget);
+    expect(find.text('IMBALANCE'), findsOneWidget);
     expect(find.text('Central Market'), findsNothing);
     await shot('basic-1');
-    // Swipe both stacks up: the car left, the route right.
-    for (final pv in find.byType(PageView).evaluate().toList()) {
-      await t.drag(find.byWidget(pv.widget), const Offset(0, -300));
-    }
-    await t.pumpAndSettle();
-    await t.runAsync(() => Future.wait([
-          for (final e in find.byType(Image).evaluate()) precacheImage((e.widget as Image).image, e),
-        ]));
-    await t.pump();
+    // One on: the drive left (with the air outside), the route right.
+    await swipe(left, 1);
+    await swipe(right, 1);
+    expect(find.textContaining('PEAK'), findsOneWidget);
+    expect(find.text('OUTSIDE'), findsOneWidget);
     expect(find.text('Central Market'), findsOneWidget);
     await shot('basic-2');
     // Every card on either side: the left stack on to the route as well.
-    final left = find.byType(PageView).first;
-    for (var i = 0; i < 2; i++) {
-      await t.drag(left, const Offset(0, -300));
-      await t.pumpAndSettle();
-    }
+    await swipe(left, 3);
     expect(find.text('Central Market'), findsNWidgets(2));
     // Each side's card is kept for the next start.
     final prefs = await SharedPreferences.getInstance();
-    expect((prefs.getInt('cardLeft'), prefs.getInt('cardRight')), (3, 3));
-    // On: the g-meter left, the pack's other draws right.
-    await t.drag(left, const Offset(0, -300));
-    await t.pumpAndSettle();
-    final right = find.byType(PageView).last;
-    for (var i = 0; i < 2; i++) {
-      await t.drag(right, const Offset(0, -300));
-      await t.pumpAndSettle();
-    }
-    expect(find.textContaining('PEAK'), findsOneWidget);
-    expect(find.text('POWER USE'), findsOneWidget);
-    expect(find.text('0.6 kW'), findsOneWidget); // 12 V
+    expect((prefs.getInt('cardLeft'), prefs.getInt('cardRight')), (4, 4));
+    // Back: the car left, energy right.
+    await swipe(left, -2);
+    await swipe(right, -4);
+    expect(find.text('CLIMATE'), findsOneWidget);
     await shot('basic-3');
     await t.pumpWidget(const SizedBox());
   });
