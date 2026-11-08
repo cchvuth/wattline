@@ -31,7 +31,7 @@ String diagReport(Panda o, Commander? bt) {
     final secs = DateTime.now().difference(o.captureStart).inMilliseconds / 1000;
     final ids = o.frames.keys.toList()..sort();
     final b = StringBuffer()
-      ..writeln('tesla-dash diagnostics ${DateTime.now().toIso8601String()}')
+      ..writeln('wattline diagnostics ${DateTime.now().toIso8601String()}')
       ..writeln('build: ${diagBuild.isEmpty ? 'unknown' : diagBuild}')
       ..writeln('platform: ${Platform.operatingSystem} ${Platform.operatingSystemVersion}')
       ..writeln('link: ${o.status}, ${o.frameHz} frames/s, capture-all: ${o.captureAll}, '

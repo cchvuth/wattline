@@ -623,7 +623,7 @@ void main() {
     expect(d, contains(' rearKw=-4 '));
     expect(d, contains(' frontKw=- '));
     final r = diagReport(p, null);
-    expect(r, startsWith('tesla-dash diagnostics '));
+    expect(r, startsWith('wattline diagnostics '));
     expect(r, contains('build: unknown')); // no native side in a test
     expect(r, contains('rear -4.0 kW'));
     expect(RegExp(r'0x266 +1/2 +\d').hasMatch(r), isTrue); // first bus / latest bus
