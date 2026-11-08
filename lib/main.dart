@@ -1047,7 +1047,9 @@ class _DashPageState extends State<DashPage> {
             _Actions(obd: o, bt: _bt, onTap: _press),
             _Actions(obd: o, bt: _bt, onTap: _press, right: true),
           ])),
-          _fit(_Nav(obd: o, bt: _bt, tall: true)),
+          // The route at the figures' size too; centred in its card, which
+          // bounds its width so a long name wraps rather than shrinks it.
+          Center(child: _Nav(obd: o, bt: _bt, tall: true, size: small)),
         ];
     Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
     return Row(children: [

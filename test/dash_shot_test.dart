@@ -380,6 +380,9 @@ void main() {
     expect(find.text('Central Market'), findsOneWidget);
     // At arrival: the battery, and what the route takes of it now (52 %).
     expect(find.text('47% −5', findRichText: true), findsOneWidget);
+    // The route's values the full layout's figures' size on screen (16 at a
+    // 1.1 line), not scaled up with the card.
+    expect(t.getRect(find.text('9 min')).height, closeTo(16 * 1.1, 0.6));
     await shot('basic-2');
     // Every card on either side: the left stack on to the route as well.
     await swipe(left, 3);

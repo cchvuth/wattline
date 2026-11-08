@@ -373,12 +373,13 @@ class _Fill extends StatelessWidget {
 /// from the car's API through the Commander's own link to the car. Values
 /// without data stay hidden.
 class _Nav extends StatelessWidget {
-  const _Nav({required this.obd, required this.bt, this.oneLine = false, this.tall = false});
+  const _Nav({required this.obd, required this.bt, this.oneLine = false, this.tall = false, this.size = 1});
 
   final Panda obd;
   final Commander bt;
   final bool oneLine; // the compact dash: one row under the ring
   final bool tall; // basic's card: the place, then a value a line
+  final double size; // its text over the bar's, as [_statRow]'s (basic: the full layout's on screen)
 
   @override
   Widget build(BuildContext context) {
@@ -390,7 +391,7 @@ class _Nav extends StatelessWidget {
         : bt.navDest != null || mins > 0;
     if (!route) {
       return tall
-          ? const Text('NO ROUTE', style: TextStyle(fontSize: 14, letterSpacing: 2, color: Colors.white38))
+          ? Text('NO ROUTE', style: TextStyle(fontSize: 14 * size, letterSpacing: 2 * size, color: Colors.white38))
           : const SizedBox.shrink();
     }
     final trip = mins > 0; // none yet, or a finished route's zeros
@@ -414,7 +415,7 @@ class _Nav extends StatelessWidget {
     // height at the text cap, so the ring keeps its size as a route comes
     // and goes.
     final big = TextStyle(
-        fontSize: tall ? 16 : 18, height: 1.1, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]);
+        fontSize: (tall ? 16 : 18) * size, height: 1.1, color: Colors.white, fontFeatures: const [FontFeature.tabularFigures()]);
     final togo = m < 1 ? '<1 min' : m < 60 ? '$m min' : '${m ~/ 60}h ${m % 60}m';
     // The arrival clock, in the phone's 12 or 24 hour format.
     final clock = TimeOfDay.fromDateTime(
@@ -423,12 +424,12 @@ class _Nav extends StatelessWidget {
     // Every value after its icon; [note]: a smaller grey figure after it.
     Widget stat(IconData icon, String text, {TextStyle? style, String? note}) =>
         Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 15, color: Colors.white70),
-          const SizedBox(width: 4),
+          Icon(icon, size: 15 * size, color: Colors.white70),
+          SizedBox(width: 4 * size),
           Text.rich(
               TextSpan(text: text, children: [
                 if (note != null)
-                  TextSpan(text: note, style: const TextStyle(fontSize: 14, color: Colors.white54)),
+                  TextSpan(text: note, style: TextStyle(fontSize: 14 * size, color: Colors.white54)),
               ]),
               style: style ?? big),
         ]);
@@ -465,13 +466,15 @@ class _Nav extends StatelessWidget {
     final blank = !trip && dist == null && energy == null && (oneLine || length == null);
     if (oneLine) return blank ? const SizedBox.shrink() : card(line);
     if (tall) {
+      // As wide as its card lets it (the name wraps there, never shrinking
+      // the rest), and no wider than this.
       return ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 240),
-        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, spacing: 6, children: [
+        constraints: BoxConstraints(maxWidth: 240 * size),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, spacing: 6 * size, children: [
           if (bt.navDest case final dest?)
-            Text(dest, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16, color: Colors.white))
+            Text(dest, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16 * size, color: Colors.white))
           else
-            const Text('DESTINATION', style: TextStyle(fontSize: 11, letterSpacing: 1.5, color: Colors.white70)),
+            Text('DESTINATION', style: TextStyle(fontSize: 11 * size, letterSpacing: 1.5 * size, color: Colors.white70)),
           if (trip) ...[stat(Icons.hourglass_bottom, togo), stat(Icons.flag, clock)],
           if (length != null) stat(Icons.route, length),
           if (dist != null) stat(Icons.electric_car, dist, note: drop <= 0 ? null : ' −$drop'),
