@@ -95,11 +95,12 @@ class Panda extends ChangeNotifier {
 
   double? pedalPct;
 
-  /// How hard the brake is pressed, %, for the ring: the master cylinder's
-  /// pressure over [brakeFullBar]; under 2 bar is a foot resting on it.
-  /// Null until the frame comes (the ring then shows no brake).
+  /// How hard the brake is pressed, %, for the ring. ponytail: not set from
+  /// the car yet. ID38D's master cylinder pressure ([_brakeBar]) did not follow
+  /// the pedal in the car, so it and two other candidates are traced until a
+  /// drive shows which does; the ring shows no brake meanwhile (null).
   double? brakePct;
-  double? _brakeBar;
+  double? _brakeBar, _rodBB, _rodIB;
 
   /// Android's installer refused or the user cancelled an in-app update
   /// (it shares this class's native channel); the dash says so.
@@ -109,9 +110,9 @@ class Panda extends ChangeNotifier {
   double? _steerSccm;
 
   /// The steering wheel's angle, deg, left positive: the car picture's path
-  /// lines, from ID129 ([_steerSccm]). ponytail: its sign (left positive
-  /// here) and range are the DBC's, unchecked; a drive's trace will say,
-  /// and ID370 stands by should ID129 not come.
+  /// lines, from ID129 ([_steerSccm]) with its sign flipped: the car's own
+  /// reading is positive to the right (seen in the car, 2026-11-08). Its
+  /// range is the DBC's, unchecked; ID370 stands by should ID129 not come.
   double? get steerDeg => _steerDeg;
   set steerDeg(double? v) {
     _steerDeg = v;
@@ -122,7 +123,7 @@ class Panda extends ChangeNotifier {
   DateTime? _turnedAt;
 
   /// The wheel turned past this shows the path lines.
-  static const steerShowDeg = 60.0;
+  static const steerShowDeg = 3.0;
 
   /// The path lines show while the wheel is turned, and for 2 s after it is
   /// fairly straight again, so a wheel unwinding through the middle, or
@@ -419,7 +420,7 @@ class Panda extends ChangeNotifier {
         'bt ${b == null ? '-' : (b.keys.where((k) => b[k] is num).toList()..sort()).map((k) => '$k=${b[k]}').join(' ')} | '
         'now 118 ${hexOf(frames[0x118]?.data ?? const [])} 2b6 ${hexOf(frames[0x2B6]?.data ?? const [])} '
         'brake=$braking slippery=$slippery | '
-        'brake mc=$_brakeBar/${frames[0x38D]?.count ?? 0} | '
+        'brake mc=$_brakeBar bb=$_rodBB ib=$_rodIB | ${raw(0x38D)} | ${raw(0x3AF)} | ${raw(0x39D)} | '
         'steer sccm=$_steerSccm/${frames[0x129]?.count ?? 0} epas=${_epasAngle()}/${frames[0x370]?.count ?? 0} '
         '${hexOf(frames[0x129]?.data ?? const [])} / ${hexOf(frames[0x370]?.data ?? const [])}';
   }
@@ -873,7 +874,7 @@ class Panda extends ChangeNotifier {
     speed = 0;
     frontKw = rearKw = pedalPct = packKw = _packV = _frontAt = _rearAt = _other = null;
     lvKw = _compKw = _heatLKw = _heatRKw = _lvV = null;
-    _brakeBar = brakePct = _steerSccm = steerDeg = null;
+    _brakeBar = _rodBB = _rodIB = brakePct = _steerSccm = steerDeg = null;
     _compOk = false;
   }
 
@@ -943,7 +944,6 @@ class Panda extends ChangeNotifier {
     0x2E5, 0x266, 0x33A, 0x332, 0x352, 0x392, // motor power, soc, cells, energy
     0x347, 0x238, 0x3FD, 0x321, 0x2F3, 0x25A, 0x273, // nav, outside, climate, tyres, tilt
     0x472, 0x333, 0x33B, // charging: reason, limit, time
-    0x38D, // brake pressure, live for the ring (100 a second, by the DBC)
     0x129, // steering angle, live for the path lines (100 a second, by the DBC)
     0x219, 0x243, // not on this car's stream
   };
@@ -954,7 +954,9 @@ class Panda extends ChangeNotifier {
     (parked: false, ids: [0x3C2, 0x31A]), // buckles: 22
     (parked: false, ids: [0x102, 0x103, 0x3E2]), // doors, trunk, map lights: 22
     // With the other steering frame on trial (100 a second, by the DBC).
-    (parked: false, ids: [0x252, 0x2A7, 0x2B4, 0x370]), // regen limit, draws: 26
+    // With the steering frame ID370 and the brake's three candidates on trial
+    // (each 25-100 a second, by the DBC).
+    (parked: false, ids: [0x252, 0x2A7, 0x2B4, 0x370, 0x38D, 0x3AF, 0x39D]), // regen limit, draws: 26
     (parked: false, ids: [0x2B3]), // cabin temperatures, CO2, heater: 14
     // In any gear, or a charge ended just before driving off would read as
     // charging all the way; and on throughout a charge, for its live power.
@@ -1387,10 +1389,13 @@ class Panda extends ChangeNotifier {
           _blend();
         case 'steerSccm':
           _steerSccm = v;
-          steerDeg = v; // the path lines, from this frame for now
+          steerDeg = -v; // the path lines: this frame is positive to the right, as the car showed
         case 'brakeBar':
           _brakeBar = v;
-          brakePct = v < 2 ? 0 : (v / brakeFullBar * 100).clamp(0, 100).toDouble();
+        case 'rodBB':
+          _rodBB = v;
+        case 'rodIB':
+          _rodIB = v;
         case 'compV':
           _compOk = v >= 200 && v <= 600 && (v - (_packV ?? v)).abs() < 40;
         case 'compW':

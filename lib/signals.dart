@@ -63,10 +63,13 @@ const kSignals = <String, Sig>{
   // driving on it and coasting, and clear in P; so it lights the dash's lamp
   // as the car lights its own. Bits 48-50 beside it stay 0.
   'brake': Sig(0x118, 51, 1),
-  // How hard the brake is pressed, for the ring: ID38D ESP_party3,
-  // ESP_brakeMasterCylPress, bar (2026.26 Model Y party DBC; 10 ms). The
-  // owner's pick of the DBC's three candidates; yet to be seen on this car.
-  'brakeBar': Sig(0x38D, 44, 10, scale: 0.3, offset: -30, sna: 1023),
+  // How hard the brake is pressed, for the ring: three candidates from the
+  // 2026.26 Model Y party DBC, polled and traced side by side until a drive
+  // shows which follows the pedal. ID38D's master cylinder pressure was
+  // tried first and, seen in the car, wandered low with no tie to the pedal.
+  'brakeBar': Sig(0x38D, 44, 10, scale: 0.3, offset: -30, sna: 1023), // ESP_brakeMasterCylPress, bar
+  'rodBB': Sig(0x3AF, 26, 12, scale: 0.015625, offset: -5), // BB_sInputRod, mm
+  'rodIB': Sig(0x39D, 21, 12, scale: 0.015625, offset: -5), // IBST_sInputRodDriver, mm
   // The steering wheel's angle, deg, for drawing the front wheels: on trial,
   // traced not shown, as neither frame has been seen on this car. ID129
   // SCCM_steeringAngle (2026.26 Model Y DBC, which notes it unseen on a

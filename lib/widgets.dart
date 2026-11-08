@@ -1111,7 +1111,7 @@ class _CarLights extends CustomPainter {
   final bool reverse;
 
   /// The steering wheel's angle, deg, left positive: the car's path either
-  /// side, dotted, while the wheel is turned past 60° and 2 s after.
+  /// side, dotted, while the wheel is turned past 3° and 2 s after.
   final double? steerDeg;
 
   /// Whether to draw them ([Panda.steerLines]): past the mark, or just back.

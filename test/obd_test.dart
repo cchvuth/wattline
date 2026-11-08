@@ -700,28 +700,36 @@ void main() {
     expect(line, contains('sccm=27.0'));
     expect(line, contains('epas=-36.0'));
     expect(kSubscribeIds, containsAll([0x129, 0x370]));
-    expect(p.steerDeg, 27.0); // ID129 drives the path lines
+    expect(p.steerDeg, -27.0); // ID129 drives the path lines, positive left
   });
 
   test('the path lines stay 2 s after the wheel is fairly straight', () async {
     final p = Panda();
     expect(p.steerLines, isFalse);
-    p.steerDeg = 30; // never turned past the mark
+    p.steerDeg = 2; // never turned past the mark
     expect(p.steerLines, isFalse);
     p.steerDeg = 200;
     expect(p.steerLines, isTrue);
-    p.steerDeg = 10; // back to straight: still shown
+    p.steerDeg = 1; // back to straight: still shown
     expect(p.steerLines, isTrue);
     await Future<void>.delayed(const Duration(milliseconds: 2100));
     expect(p.steerLines, isFalse);
   });
 
+  // The brake's three candidates are decoded for the trace; none drives the
+  // ring (brakePct stays null) until a drive shows which follows the pedal.
   // 0x38D ESP_brakeMasterCylPress 44|10 x0.3 -30 bar.
-  test('brake pressure: a share of full braking, nothing at rest', () {
-    final p = Panda()..onFrame(0x38D, 1, [0, 0, 0, 0, 0, 0x60, 0x0E]); // raw 230: 39 bar
-    expect(p.brakePct, closeTo(39 / Panda.brakeFullBar * 100, 1e-6));
-    p.onFrame(0x38D, 1, [0, 0, 0, 0, 0, 0x40, 0x06]); // raw 100: 0 bar
-    expect(p.brakePct, 0);
+  test('brake candidates reach the trace, and the ring shows no brake yet', () {
+    final p = Panda()
+      ..onFrame(0x38D, 1, [0, 0, 0, 0, 0, 0x60, 0x0E]) // raw 230: 39 bar
+      ..onFrame(0x3AF, 1, [0, 0, 0, 0x0C, 0, 0, 0, 0]) // BB_sInputRod
+      ..onFrame(0x39D, 1, [0, 0, 0x20, 0, 0]); // IBST_sInputRodDriver
+    final line = p.traceLine();
+    expect(line, contains('mc=39.0'));
+    expect(line, contains('bb='));
+    expect(line, contains('ib='));
+    expect(p.brakePct, isNull);
+    expect(kSubscribeIds, containsAll([0x38D, 0x3AF, 0x39D]));
   });
 
   test('other draws: climate, 12 V and the rest of the pack-motor gap', () {
