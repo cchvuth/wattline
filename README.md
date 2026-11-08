@@ -61,6 +61,12 @@ on its own side: trunk, mirror tilt and the charge port on the left,
 frunk, recirculation and interior lights on the right. More actions
 (locks, honk, flash, climate) are under ⋯.
 
+**Basic layout** (picked at the first launch, or a switch in the settings):
+the same ring, with bigger text in a stack of cards on each side, swiped up
+or down. The cards are energy (battery, power use, pack health), drive
+(lights and grip, Autopilot, g-meter, outside), the car, the buttons and
+the route. Either side can show any card, and each side remembers its own.
+
 ## Where the data comes from
 
 The Commander offers two links, and the app uses both:
