@@ -1254,9 +1254,8 @@ class _Pack extends StatelessWidget {
   }
 }
 
-/// A temperature as the car reads it: to the half degree near freezing,
-/// whole degrees beyond.
-String _deg(double c) => '${c.abs() < 10 ? c.toStringAsFixed(1) : c.round()} °C';
+/// The air outside, in whole degrees, the degree sign against the number.
+String _deg(double c) => '${c.round()}°';
 
 /// European-style sign; blank while the car reports no limit.
 class _SpeedLimit extends StatelessWidget {

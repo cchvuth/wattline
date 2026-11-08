@@ -520,20 +520,20 @@ void main() {
       ..kph = true
       ..gear = 'D'
       ..speed = 50
-      ..outsideC = 4.5;
+      ..outsideC = 4;
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
     await _frames(t);
     expect(find.text('50'), findsOneWidget);
     o
       ..speed = 61
-      ..outsideC = 7.5
+      ..outsideC = 7
       ..fastTick();
     await t.pump();
     expect(find.text('61'), findsOneWidget); // the speed: at once
-    expect(find.textContaining('4.5'), findsOneWidget); // the card: not yet
+    expect(find.text('4°'), findsOneWidget); // the air outside: not yet
     o.notifyListeners();
     await t.pump();
-    expect(find.textContaining('7.5'), findsOneWidget);
+    expect(find.text('7°'), findsOneWidget);
     await t.pumpWidget(const SizedBox());
   });
 }

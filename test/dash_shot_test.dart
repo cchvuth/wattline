@@ -44,7 +44,17 @@ final _shots = <String, (Size, Panda Function())>{
   // A dark November morning: ice on the bridge, a cold pack, a full car
   // recirculating, a third-row seat unbuckled, signalling right mid-flash.
   'cold-morning': (const Size(823.5, 384), () {
+    // Easing off on regen at 380 V: 41.6 A into the pack (15.8 kW) from the
+    // motors' 21, less the heat pump's 2.9 kW, the 12 V side's 0.8 and 1.5 kW
+    // of the rest (the pack heating). Frames as the car lays them out: the
+    // climate figure comes off them as in the car.
     final o = _car()
+      ..onFrame(0x118, 1, [0, 0, 0x80, 0, 0, 0, 0, 0])
+      ..onFrame(0x132, 1, [0x70, 0x94, 0xA0, 0x01, 0, 0]) // 380.00 V, +41.6 A
+      ..onFrame(0x2A7, 1, [0, 0, 0x40, 0x24, 0, 0xF0, 0x05, 0]) // compressor 2.9 kW at 380 V
+      ..onFrame(0x2B4, 1, [183, 5, 88, 14, 34, 2]) // 12 V: 14.63 V x 54.6 A
+      ..onFrame(0x2E5, 1, [0, 0, 0, 0, 0xD0, 0xF4, 0x0F]) // front -3 kW
+      ..onFrame(0x266, 1, [0, 0, 0, 0, 0x88, 0xB8, 0x0F]) // rear -18 kW
       ..speed = 38
       ..gear = 'D'
       ..frontKw = -3
@@ -431,6 +441,50 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  // The basic energy card, charging and not: the dial and what is under it
+  // (the charge, or the draws) together in the card's middle.
+  testWidgets('basic layout: the energy card centred, charging or not', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    t.view
+      ..physicalSize = const Size(823.5, 384) * _dpr
+      ..devicePixelRatio = _dpr;
+    final key = GlobalKey();
+    final (_, charging) = _shots['charging']!;
+    final o = charging();
+    await t.pumpWidget(MaterialApp(
+        theme: kTheme,
+        debugShowCheckedModeBanner: false,
+        home: RepaintBoundary(
+            key: key, child: DashPage(demo: o, basic: true, bt: Commander()..show(BtLink.lean, 'ready')))));
+    await t.pump(const Duration(milliseconds: 300));
+    final page = t.getRect(find.byType(PageView).first);
+    final dial = find.byWidgetPredicate((w) => w is CustomPaint && w.painter.runtimeType.toString() == '_DialPainter');
+    // As much room above the dial as under the card's last row.
+    void centred() {
+      final top = t.getRect(dial).top, bottom = t.getRect(find.text('DEGRADATION')).bottom;
+      expect((top - page.top) - (page.bottom - bottom), closeTo(0, 4));
+    }
+
+    expect(find.text('CHARGE'), findsOneWidget);
+    centred();
+    final out = Platform.environment['DASH_SHOT'];
+    if (out != null) {
+      await t.runAsync(() async {
+        final img = await (key.currentContext!.findRenderObject() as RenderRepaintBoundary).toImage(pixelRatio: _dpr);
+        final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+        File('$out/basic-charging.png').writeAsBytesSync(bytes!.buffer.asUint8List());
+      });
+    }
+    o
+      ..charging = false
+      ..notifyListeners();
+    await t.pump();
+    expect(find.text('CHARGE'), findsNothing);
+    expect(find.text('CLIMATE'), findsOneWidget);
+    centred();
+    await t.pumpWidget(const SizedBox());
+  });
+
   // The assist state as the car's wheel on a disc at the ring's top right:
   // grey ready, blue steering, flashing amber for the hands-on nag (the wheel
   // dark on it), red and still once Autopilot is locked out. The air outside
@@ -456,7 +510,7 @@ void main() {
     double fade(String words) =>
         t.widget<FadeTransition>(find.descendant(of: find.byTooltip(words), matching: find.byType(FadeTransition))).opacity.value;
     final ring = t.getRect(find.byType(RingGauge)), car = t.getRect(find.image(const AssetImage('assets/car/car.png')));
-    final icon = t.getCenter(find.byTooltip('AP READY')), out = t.getRect(find.text('4.5 °C'));
+    final icon = t.getCenter(find.byTooltip('AP READY')), out = t.getRect(find.text('5°')); // 4.5, in whole degrees
     expect(icon.dx, greaterThan(ring.center.dx + ring.width * 0.3)); // top right
     expect(icon.dy, lessThan(ring.center.dy - ring.height * 0.25));
     expect(disc('AP READY'), const Color(0xFF5E5E5E));
