@@ -10,7 +10,7 @@ import 'package:tesla_dash/glyphs.dart';
 void main() {
   testWidgets('glyphs', (t) async {
     final key = GlobalKey();
-    t.view.physicalSize = const Size(840, 600); // room for a row more as glyphs are added
+    t.view.physicalSize = const Size(840, 800); // room for a row more as glyphs are added
     t.view.devicePixelRatio = 1;
     await t.pumpWidget(Directionality(
       textDirection: TextDirection.ltr,
