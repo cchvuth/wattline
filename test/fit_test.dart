@@ -217,6 +217,17 @@ void main() {
     await _frames(t);
     expect(t.widget<Switch>(smooth).value, isTrue);
     expect(prefs.getBool('smoothRing'), isTrue);
+    // 12 V, other power and the cell imbalance: shown unless switched off,
+    // kept, and gone from the dash at once.
+    final minor = find.byType(Switch).at(3);
+    expect(t.widget<Switch>(minor).value, isTrue);
+    expect(find.text('IMBALANCE'), findsOneWidget);
+    await t.ensureVisible(minor);
+    await t.tap(minor);
+    await _frames(t);
+    expect(prefs.getBool('minorFigures'), isFalse);
+    expect(find.text('IMBALANCE'), findsNothing);
+    expect(find.text('DEGRADATION'), findsOneWidget);
     // Sparse polling: on unless switched off, kept, and told to the link.
     final sparse = find.byType(Switch).last;
     expect(t.widget<Switch>(sparse).value, isTrue);

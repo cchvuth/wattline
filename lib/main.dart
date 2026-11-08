@@ -111,6 +111,7 @@ class _DashPageState extends State<DashPage> {
   int _settleMs = 3000, _buttonsMs = 500, _rejoinMs = 2000, _backMs = 15000;
   bool _wifiFirst = true; // Bluetooth waits for the WiFi stream, however long
   bool _smooth = false; // the power ring and pedal line glide on every change
+  bool _minor = true; // 12 V, other power and cell imbalance shown
   late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
   int _cardLeft = 0, _cardRight = 3; // the card each side shows: energy, the buttons
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
@@ -150,6 +151,7 @@ class _DashPageState extends State<DashPage> {
     _backMs = prefs.getInt('btBackMs') ?? _backMs;
     _wifiFirst = prefs.getBool('btWifiFirst') ?? _wifiFirst;
     _smooth = prefs.getBool('smoothRing') ?? _smooth;
+    _minor = prefs.getBool('minorFigures') ?? _minor;
     _basic = prefs.getBool('basic') ?? _basic;
     _cardLeft = prefs.getInt('cardLeft') ?? _cardLeft;
     _cardRight = prefs.getInt('cardRight') ?? _cardRight;
@@ -855,6 +857,18 @@ class _DashPageState extends State<DashPage> {
               },
             ),
           ]),
+          // The figures few glance at: off, the rows go, the rest closes up.
+          Row(children: [
+            const Expanded(child: Text('Show 12 V, other power and cell imbalance')),
+            Switch(
+              value: _minor,
+              onChanged: (v) async {
+                redraw(() => _minor = v);
+                setState(() {});
+                (await SharedPreferences.getInstance()).setBool('minorFigures', v);
+              },
+            ),
+          ]),
           // Off, every id streams: doors and belts live, but more frames for
           // the Commander to drop, speed's among them.
           Row(children: [
@@ -944,7 +958,7 @@ class _DashPageState extends State<DashPage> {
   Widget _ring(Panda o, {bool outside = false}) => AspectRatio(
         aspectRatio: 1,
         child: LayoutBuilder(builder: (context, box) {
-          const size = 40.0;
+          const size = 30.0;
           // As RingGauge draws it: radius r, the motors' arcs 8.5 % of r wide.
           final half = box.maxWidth / 2, r = half - 6, d = r * 1.0425 + size / 2 + 5;
           const a = -38 * pi / 180, b = 130 * pi / 180;
@@ -1006,8 +1020,8 @@ class _DashPageState extends State<DashPage> {
             const SizedBox(height: 8),
             // The draws and the pack's health in one column, the values lined up.
             Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
-              _Pack(obd: o, outside: false),
+              if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o, minor: _minor),
+              _Pack(obd: o, outside: false, minor: _minor),
             ]),
           ]),
           Column(children: [
@@ -1144,8 +1158,8 @@ class _DashPageState extends State<DashPage> {
                             child: FittedBox(
                               fit: BoxFit.scaleDown,
                               child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-                                if (o.wifiLive && o.otherKw != null) _Draws(obd: o),
-                                _Pack(obd: o, outside: false),
+                                if (o.wifiLive && o.otherKw != null) _Draws(obd: o, minor: _minor),
+                                _Pack(obd: o, outside: false, minor: _minor),
                               ]),
                             ),
                           ),

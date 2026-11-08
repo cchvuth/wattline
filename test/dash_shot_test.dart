@@ -423,10 +423,11 @@ void main() {
     expect(out.center.dx, lessThan(ring.center.dx - ring.width * 0.3)); // bottom left
     expect(out.center.dy, greaterThan(ring.center.dy + ring.height * 0.3));
     expect(out.left, greaterThan(car.right)); // clear of the car
-    // Neither on the arc: the disc (radius 20) and the text's corner nearest
+    // Neither on the arc: the disc (radius 15) and the text's corner nearest
     // the ring wholly outside its outer edge.
     final r = (ring.width / 2 - 6) * 1.0425;
-    expect((icon - ring.center).distance - 20, greaterThan(r));
+    expect(t.getSize(find.byTooltip('AP READY')), const Size(30, 30));
+    expect((icon - ring.center).distance - 15, greaterThan(r));
     expect((t.getRect(find.text('OUTSIDE')).topRight - ring.center).distance, greaterThan(r));
     // The g-meter over the battery dial, the pack's figures under it.
     expect(t.getCenter(find.textContaining('PEAK')).dy, lessThan(t.getCenter(find.text('64%', findRichText: true)).dy));

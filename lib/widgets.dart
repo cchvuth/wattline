@@ -1160,10 +1160,11 @@ Widget _statRow(BuildContext context, String label, String value, {Color color =
     ]);
 
 class _Pack extends StatelessWidget {
-  const _Pack({required this.obd, this.outside = true, this.pack = true});
+  const _Pack({required this.obd, this.outside = true, this.pack = true, this.minor = true});
 
   final Panda obd;
   final bool outside, pack; // the air outside (and washer), the pack's health
+  final bool minor; // the cell imbalance (a switch in the settings hides it)
 
   @override
   Widget build(BuildContext context) {
@@ -1178,7 +1179,7 @@ class _Pack extends StatelessWidget {
         if (o.wifiLive && o.washerLow) row('WASHER', 'LOW', color: kWarn),
       ],
       if (pack) ...[
-        row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
+        if (minor) row('IMBALANCE', mv == null ? '—' : '${mv.round()} mV'),
         row('DEGRADATION', kwh == null || isNew == null ? '—' : '${((1 - kwh / isNew) * 100).clamp(0, 100).toStringAsFixed(1)} %'),
       ],
     ]));
@@ -1680,9 +1681,10 @@ class _Cabin extends StatelessWidget {
 
 /// Basic layout's card of what the pack feeds besides the motors.
 class _Draws extends StatelessWidget {
-  const _Draws({required this.obd});
+  const _Draws({required this.obd, this.minor = true});
 
   final Panda obd;
+  final bool minor; // 12 V and the rest (a switch in the settings hides them)
 
   @override
   Widget build(BuildContext context) {
@@ -1690,8 +1692,10 @@ class _Draws extends StatelessWidget {
     String kw(double? v) => !live || v == null ? '—' : '${v.toStringAsFixed(1)} kW';
     return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
       _statRow(context, 'CLIMATE', kw(o.climateKw)),
-      _statRow(context, '12 V', kw(o.lvKw)),
-      _statRow(context, 'OTHER', kw(o.otherKw)),
+      if (minor) ...[
+        _statRow(context, '12 V', kw(o.lvKw)),
+        _statRow(context, 'OTHER', kw(o.otherKw)),
+      ],
     ]);
   }
 }
