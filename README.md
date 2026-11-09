@@ -68,13 +68,20 @@ frunk, recirculation and interior lights on the right. More actions
 tap on the gear under the speed, which swaps back too):
 the same ring, with bigger text in a full-height stack of cards on each side,
 swiped up or down. The cards are energy (battery, power use, pack health),
-drive (lights and grip, g-meter, outside), the car (raised in reverse to show
-the path lines behind it), the buttons and the route. Either side can show
-any card, and each side remembers its own.
+drive (lights and grip, g-meter), the car (raised in reverse to show the path
+lines behind it), the buttons, the route, and power (the pack's draw round a
+dial, regen green, the battery and range at its foot). Either side can show
+any card, and each side remembers its own. The ring swipes up or down too, to
+a speedometer: one arc to 250 km/h with a needle that trails a blue glow as
+the speed changes.
 
 | Energy and buttons | Drive and route | The car and energy |
 |---|---|---|
 | ![](docs/screenshots/basic-1.png) | ![](docs/screenshots/basic-2.png) | ![](docs/screenshots/basic-3.png) |
+
+| The speedometer | Power, the speedometer and the g-meter |
+|---|---|
+| ![](docs/screenshots/basic-speedo.png) | ![](docs/screenshots/basic-dials.png) |
 
 ## Where the data comes from
 
