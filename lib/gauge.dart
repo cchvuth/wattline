@@ -199,7 +199,7 @@ class _RingPainter extends CustomPainter {
       final reach = room * v.brake.clamp(0, 100) / 100;
       canvas.drawArc(rect, _deg(90) - reach, 2 * reach, false, stroke(kAlert)..strokeWidth = w * 0.35);
       _curved(canvas, c, r + w * 0.35, 'BRAKE APPLIED', TextStyle(
-          fontFamily: kFont, color: kAlert, fontSize: r * 0.04, fontWeight: FontWeight.w100, letterSpacing: r * 0.004));
+          fontFamily: kFont, color: kAlert, fontSize: r * 0.04, fontWeight: FontWeight.bold, letterSpacing: r * 0.004));
     }
 
     // Rear: left sector, zero 15° below halfway, power climbing clockwise

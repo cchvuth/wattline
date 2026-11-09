@@ -69,7 +69,7 @@ const kBasicBase = {
 const kBasicCards = <Set<int>>[
   {0x33A, 0x332, 0x352, 0x392, 0x3A1, 0x347, 0x333, 0x33B}, // energy: battery, pack heat, health, charge
   {0x3F6, 0x2B6, 0x101}, // drive: lamps, grip, g-meter (yaw)
-  {0x3A1, 0x3C2, 0x31A, 0x2F3, 0x25A, 0x219, 0x129, 0x3F6}, // car: belts, fans, tyres, path lines, lamps
+  {0x3A1, 0x3C2, 0x31A, 0x2F3, 0x25A, 0x219, 0x129, 0x101, 0x3F6}, // car: belts, fans, tyres, path lines (moving: yaw), lamps
   {0x102, 0x103, 0x2E1, 0x25D, 0x273, 0x3E2, 0x243}, // buttons: doors, trunk, frunk, port, tilt, lights, recirc
   {0x238, 0x347, 0x3FD, 0x33A, 0x352}, // route: on a route, energy and minutes, battery now
 ];
@@ -574,8 +574,12 @@ class _DashPageState extends State<DashPage> {
           child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, spacing: 12, children: [
             const Text('1. Close the S3XY app. The Commander takes one phone at a time over Bluetooth, '
                 'and the dash\'s buttons need it.'),
-            const Text('2. The first time, approve this phone in the car: double-press the right scroll '
-                'wheel when the car asks.'),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, spacing: 16, children: [
+              const Expanded(
+                  child: Text('2. The first time, approve this phone in the car: double-press the right '
+                      'scroll wheel when the car asks.')),
+              Image.asset('assets/bt/wheel.png', width: 190),
+            ]),
             Text(ios
                 ? '3. The phone then asks for Bluetooth, for the Commander, and the local network, '
                     'for its $kDefaultSsid WiFi.'
@@ -634,10 +638,13 @@ class _DashPageState extends State<DashPage> {
     _approval = null;
     if (!_bt.approving) return;
     // Cleared first, so the prompt is the current bar and close() is safe.
-    final bar = (ScaffoldMessenger.of(context)..clearSnackBars()).showSnackBar(const SnackBar(
-      duration: Duration(minutes: 2),
-      content: Text('Approve this phone for the Commander: '
-          'in the car, double-press the right scroll wheel'),
+    final bar = (ScaffoldMessenger.of(context)..clearSnackBars()).showSnackBar(SnackBar(
+      duration: const Duration(minutes: 2),
+      content: Row(spacing: 16, children: [
+        Image.asset('assets/bt/wheel.png', height: 72), // the scroll wheel to press
+        const Expanded(
+            child: Text('Approve this phone for the Commander: in the car, double-press the right scroll wheel')),
+      ]),
     ));
     bar.closed.then((_) {
       if (identical(_approval, bar)) _approval = null;
@@ -1145,7 +1152,11 @@ class _DashPageState extends State<DashPage> {
                             child: Column(children: [
                               _Lights(obd: o),
                               const SizedBox(height: 4),
-                              Expanded(child: FittedBox(child: _Cabin(obd: o))),
+                              // A little lower: more of the road ahead.
+                              Expanded(
+                                  child: FittedBox(
+                                      child: FractionalTranslation(
+                                          translation: const Offset(0, 0.07), child: _Cabin(obd: o)))),
                             ]),
                           ),
                         ),

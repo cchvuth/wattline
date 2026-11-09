@@ -1368,7 +1368,7 @@ abstract final class _Car {
   /// 32.8° for the one road wheel of the bicycle model. The wheel turns about
   /// 450° each way, so a ratio near 13.7:1.
   /// ponytail: published figures; set them from a full-lock reading in the trace.
-  static const steerRatio = 13.7, maxRoadDeg = 32.8;
+  static const steerRatio = Panda.steerRatio, maxRoadDeg = 32.8;
 
   /// The turn signals, each side alike, on the body's edge (the narrower
   /// side of both pictures): at the nose bar's end,
@@ -1741,18 +1741,22 @@ class _Cabin extends StatelessWidget {
     // Shrinks rather than overflows in the column beside the ring.
     return FittedBox(
       fit: BoxFit.scaleDown,
-      child: Container(
-        padding: EdgeInsets.fromLTRB(6, frame, 6, frame),
-        decoration: belt
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: kAlert.withValues(alpha: 0.18),
-                border: Border.all(color: kAlert),
-              )
-            : null,
-        // The beams reach up over the lamps' row above. A little room
-        // behind for the brake glow.
-        child: Padding(padding: EdgeInsets.only(top: padTop, bottom: padBottom), child: car),
+      child: Padding(
+        // The beams reach up over the lamps' row above, and a little room
+        // behind for the brake glow: outside the unbuckled seat's frame, which
+        // keeps to the picture (its own margins clear the car).
+        padding: EdgeInsets.only(top: frame + padTop, bottom: frame + padBottom),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          decoration: belt
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: kAlert.withValues(alpha: 0.18),
+                  border: Border.all(color: kAlert),
+                )
+              : null,
+          child: car,
+        ),
       ),
     );
   }

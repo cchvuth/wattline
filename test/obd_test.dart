@@ -697,7 +697,22 @@ void main() {
       // 0x129: raw 8462 at 16|14 = 846.2 - 819.2 = 27.0 deg.
       ..onFrame(0x129, 1, [0, 0, 0x0E, 0x21, 0, 0, 0, 0]);
     expect(p.traceLine(), contains('steer deg=-27.0'));
-    expect(Panda.alwaysOn, contains(0x129));
+    expect(Panda.polledIds, contains(0x129)); // streamed at a crawl only
+    expect(p.steerDeg, -27.0);
+  });
+
+  // Moving, ID129 is not asked for: the path lines follow the car's own turn
+  // (yaw rate over speed, as the wheel angle that draws that radius), and a
+  // fresh ID129 reading wins over it.
+  test('moving, the path lines follow the yaw rate', () {
+    final p = Panda()
+      ..kph = true
+      ..speed = 72
+      ..onFrame(0x101, 0, [0xE8, 0x03, 0, 0, 0, 0, 0, 0]); // 0.1 rad/s left at 20 m/s
+    expect(p.steerDeg, closeTo(11.34, 0.01)); // 13.7 x atan(2.89 x 0.1 / 20)
+    p
+      ..onFrame(0x129, 1, [0, 0, 0x0E, 0x21, 0, 0, 0, 0]) // 27 deg right
+      ..onFrame(0x101, 0, [0xE8, 0x03, 0, 0, 0, 0, 0, 0]);
     expect(p.steerDeg, -27.0);
   });
 

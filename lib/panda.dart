@@ -125,6 +125,11 @@ class Panda extends ChangeNotifier {
 
   double? _steerDeg;
   DateTime? _turnedAt;
+  DateTime _steerAt = DateTime.fromMillisecondsSinceEpoch(0); // ID129's last frame
+
+  /// Steering wheel turns per road wheel turn, and the wheelbase, m: the path
+  /// lines' bicycle model (the car picture's [steerRatio] note).
+  static const steerRatio = 13.7, wheelbase = 2.89;
 
   /// The wheel turned past this shows the path lines.
   static const steerShowDeg = 3.0;
@@ -947,7 +952,7 @@ class Panda extends ChangeNotifier {
     0x2E5, 0x266, 0x33A, 0x332, 0x352, 0x392, // motor power, soc, cells, energy
     0x347, 0x238, 0x3FD, 0x321, 0x2F3, 0x25A, 0x273, // nav, outside, climate, tyres, tilt
     0x472, 0x333, 0x33B, // charging: reason, limit, time
-    0x129, 0x185, // steering angle and brake torque, live for the path lines and ring
+    0x185, // brake torque, live for the ring's brake line
     0x219, 0x243, // not on this car's stream
   };
 
@@ -965,8 +970,12 @@ class Panda extends ChangeNotifier {
     // way out of P to leave with its last state. A frunk that opens on the
     // move does not show until P: the car's own screen says so.
     (parked: true, ids: [0x2E1]), // frunk: 53
+    // No slot: on in R and at a crawl ([_crawl]), for the path lines while
+    // parking. Moving, they follow the yaw rate instead: streamed throughout,
+    // this one frame was a fifth of the stream and cost speed frames.
+    (parked: false, ids: [0x129]), // steering angle: 85
   ];
-  static const _chargeGroup = 5;
+  static const _chargeGroup = 5, _steerGroup = 7;
   static const _chipGroups = {2, 5, 6}; // what the buttons light from
 
   /// The groups on in each half-second slot, an 8 s round: seat belts, doors
@@ -989,7 +998,7 @@ class Panda extends ChangeNotifier {
       for (final id in _sparse[i].ids) id: i,
   };
   int _slot = 0;
-  bool _wasParked = false;
+  bool _wasParked = false, _crawl = true;
   bool _streaming = false; // CAN frames have come on this socket
   DateTime _streamAt = DateTime.fromMillisecondsSinceEpoch(0); // the first of them
 
@@ -1076,10 +1085,14 @@ class Panda extends ChangeNotifier {
     final parked = _gear == 'P', left = _wasParked && !parked;
     final hot = DateTime.now().isBefore(_hotUntil);
     _wasParked = parked;
+    // Below 14 km/h, off past 18, so it does not flap between.
+    _crawl = _gear == 'R' || (kph ? speed / 3.6 : speed * 0.44704) < (_crawl ? 5 : 4);
     for (var i = 0; i < _sparse.length; i++) {
       final g = _sparse[i], due = slot.contains(i);
-      final want = (hot && _chipGroups.contains(i) && (!g.parked || parked)) ||
-          (g.parked ? (due && parked) || left : due || (i == _chargeGroup && charging));
+      final want = i == _steerGroup
+          ? _crawl
+          : (hot && _chipGroups.contains(i) && (!g.parked || parked)) ||
+              (g.parked ? (due && parked) || left : due || (i == _chargeGroup && charging));
       // A group that should be off, whose frames still come: the remove was
       // lost or ignored, so send it again.
       if (!want && (_sparseStray[i] ?? 0) >= 3) {
@@ -1088,7 +1101,12 @@ class Panda extends ChangeNotifier {
         _sendIds(0x0e, g.ids);
       }
       _sparseStray[i] = 0;
-      if (want == (_sparseOn[i] ?? true)) continue;
+      if (want == (_sparseOn[i] ?? true)) {
+        // On for long, unlike a slot's group: a lost add would leave it dark,
+        // so said again once its 85 a second go quiet.
+        if (want && i == _steerGroup && DateTime.now().difference(_steerAt).inSeconds >= 1) _sendIds(0x0f, g.ids);
+        continue;
+      }
       _sparseOn[i] = want;
       if (!want) _sparseOffAt[i] = DateTime.now();
       sparseOps++;
@@ -1284,7 +1302,10 @@ class Panda extends ChangeNotifier {
       _brakeNm.clear();
       brakePct = null;
     }
-    if (id == 0x129) _steerDeg = null; // likewise: not available is no path lines
+    if (id == 0x129) {
+      _steerDeg = null; // likewise: not available is no path lines
+      _steerAt = DateTime.now();
+    }
     for (final e in _byId[id] ?? const <MapEntry<String, Sig>>[]) {
       final v = decode(e.value, data);
       if (v == null) continue;
@@ -1314,6 +1335,11 @@ class Panda extends ChangeNotifier {
           final ms = kph ? speed / 3.6 : speed * 0.44704;
           gLat = _smooth(gLat, v * ms / _g);
           if (gLat!.abs() > gMaxLat) gMaxLat = gLat!.abs();
+          // Moving forward with ID129 off ([_steerGroup]): the path lines from
+          // the turn the car makes, as the wheel angle that draws its radius.
+          if (ms >= 3 && _gear != 'R' && DateTime.now().difference(_steerAt).inMilliseconds > 300) {
+            steerDeg = steerRatio * atan(wheelbase * v / ms) * 180 / pi;
+          }
         case 'recirc':
           recirc = kRecirc[v.round()];
         case 'autopilot':

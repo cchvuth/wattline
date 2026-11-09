@@ -26,6 +26,7 @@ class _Commander {
   InternetAddress? peer;
   int peerPort = 0;
   final filter = <int>{};
+  final data = <int, List<int>>{}; // an id's payload, all zeros if not here
   bool can = true, session = false, ackHello = false, ackCommands = false;
   bool Function(List<int>)? drop;
   Set<int>? only; // the ids still on the bus, whatever the filter
@@ -62,7 +63,7 @@ class _Commander {
       if (!can || peer == null || !session) return;
       final out = <int>[
         for (final id in kSubscribeIds)
-          if (filter.contains(id) && (only?.contains(id) ?? true)) ..._rec(id, 0, const [0, 0, 0, 0, 0, 0, 0, 0]),
+          if (filter.contains(id) && (only?.contains(id) ?? true)) ..._rec(id, 0, data[id] ?? const [0, 0, 0, 0, 0, 0, 0, 0]),
         for (var i = 0; i < foreign; i++) ..._rec(0x7f0, 0, const [1, 2, 3, 4, 5, 6, 7, 8]),
       ];
       if (out.isNotEmpty) s.send(out, peer!, peerPort);
@@ -110,27 +111,47 @@ void main() {
       c.stop();
     });
     await _wait(3.2);
-    expect(c.filter, containsAll([0x129, 0x101]));
-    p.skip = {0x129, 0x101, 0x3A1}; // streamed, streamed, polled
+    expect(c.filter, containsAll([0x3F6, 0x101]));
+    p.skip = {0x3F6, 0x101, 0x3A1}; // streamed, streamed, polled
     await _wait(9); // a whole round of the wheel
-    expect(c.filter.intersection({0x129, 0x101, 0x3A1}), isEmpty);
-    expect(c.filter.containsAll(Panda.alwaysOn.difference({0x129, 0x101})), isTrue);
+    expect(c.filter.intersection({0x3F6, 0x101, 0x3A1}), isEmpty);
+    expect(c.filter.containsAll(Panda.alwaysOn.difference({0x3F6, 0x101})), isTrue);
     p.skip = const {};
     await _wait(0.3);
-    expect(c.filter, containsAll([0x129, 0x101]));
+    expect(c.filter, containsAll([0x3F6, 0x101]));
     // Its add lost, and another card swiped in straight after: said again
     // all the same, so the streamed ids still come back.
     var lost = 0;
-    c.drop = (b) => b[0] == 0x0f && b.length == 4 && (b[2] << 8 | b[3]) == 0x129 && lost++ == 0;
-    p.skip = {0x129, 0x101};
+    c.drop = (b) => b[0] == 0x0f && b.length == 4 && (b[2] << 8 | b[3]) == 0x3F6 && lost++ == 0;
+    p.skip = {0x3F6, 0x101};
     await _wait(1);
-    expect(c.filter.intersection({0x129, 0x101}), isEmpty);
+    expect(c.filter.intersection({0x3F6, 0x101}), isEmpty);
     p.skip = {0x101};
     p.skip = const {};
     await _wait(2.5);
     expect(lost, 1);
-    expect(c.filter, containsAll([0x129, 0x101]));
+    expect(c.filter, containsAll([0x3F6, 0x101]));
   }, timeout: const Timeout(Duration(seconds: 30)));
+
+  // The steering angle streams at a crawl, for parking; moving, the path
+  // lines follow the yaw rate and its 85 frames a second stay off.
+  test('the steering angle leaves the stream once moving', () async {
+    final c = _Commander();
+    final p = Panda();
+    await p.connect('127.0.0.1', await c.start());
+    addTearDown(() async {
+      await p.disconnect();
+      c.stop();
+    });
+    await _wait(3.2);
+    expect(c.filter, contains(0x129)); // standing
+    c.data[0x257] = const [0, 0, 0, 30, 0x02, 0, 0, 0]; // 30 km/h
+    await _wait(1.5);
+    expect(c.filter, isNot(contains(0x129)));
+    c.data[0x257] = const [0, 0, 0, 5, 0x02, 0, 0, 0]; // 5 km/h
+    await _wait(1.5);
+    expect(c.filter, contains(0x129));
+  }, timeout: slow);
 
   // With sparse polling off too, a lost remove of a skipped id is sent again.
   test('sparse off: a skipped id whose remove was lost goes after all', () async {
