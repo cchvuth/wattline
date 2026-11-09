@@ -8,10 +8,11 @@ part of 'main.dart';
 /// full and basic layouts swap). Without [onGear] no gear: the compact dash
 /// has it in its corner.
 class _Centre extends StatelessWidget {
-  const _Centre({required this.obd, this.onGear});
+  const _Centre({required this.obd, this.onGear, this.gearOnly = false});
 
   final Panda obd;
   final VoidCallback? onGear;
+  final bool gearOnly; // the gear alone, a little higher: under the [_Speedo]
 
   @override
   Widget build(BuildContext context) {
@@ -21,6 +22,7 @@ class _Centre extends StatelessWidget {
     final cue = _cue(charge);
     return LayoutBuilder(
         builder: (context, c) => Stack(alignment: Alignment.center, children: [
+          if (!gearOnly) ...[
           Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -69,12 +71,13 @@ class _Centre extends StatelessWidget {
               child: FittedBox(child: _SpeedLimit(limit: obd.speedLimit)),
             ),
           ),
+          ],
           // Only the gear engaged, in the gap the ring leaves at its foot,
           // clear of the brake's arc there.
           // A finger's room round it to tap; the -8 keeps the letter in place.
           if (onGear != null)
             Positioned(
-              bottom: c.maxHeight * 0.05 - 8,
+              bottom: c.maxHeight * (gearOnly ? 0.11 : 0.05) - 8, // a little higher on the speedometer
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
                 onTap: onGear,
@@ -136,6 +139,276 @@ class _Centre extends StatelessWidget {
 }
 
 /// Column beside the ring.
+
+/// The basic layout's other ring face, a gas car's speedometer: one arc over
+/// the top, dashed and numbered, a needle trailing a blue glow as it moves, the figure small on the inner
+/// left (the needle passes over it), the limit on the inner top right, and the
+/// gear where the power ring has it.
+class _Speedo extends StatelessWidget {
+  const _Speedo({required this.obd, this.onGear});
+
+  final Panda obd;
+  final VoidCallback? onGear;
+
+  @override
+  Widget build(BuildContext context) {
+    final o = obd, top = o.kph ? 250 : 160; // the arc's end: past the car's top speed, km/h or mph
+    return LayoutBuilder(builder: (context, c) {
+      final side = min(c.maxWidth, c.maxHeight), r = RingGauge.radiusIn(side);
+      final end = o.live ? (o.speed / top).clamp(0.0, 1.0) : 0.0;
+      // The needle a little behind the speed, the trail's glow further back.
+      return TweenAnimationBuilder<double>(
+        tween: Tween(end: end),
+        duration: const Duration(milliseconds: 150),
+        builder: (context, f, _) => TweenAnimationBuilder<double>(
+        tween: Tween(end: end),
+        duration: const Duration(milliseconds: 700),
+        curve: Curves.easeOut,
+        builder: (context, lag, _) => Stack(alignment: Alignment.center, children: [
+          // The dial a little lower, its arc over the top centred in the box;
+          // the gear stays.
+          Positioned.fill(
+              child: Transform.translate(
+                  offset: Offset(0, r * 0.15),
+                  child: Stack(alignment: Alignment.center, children: [
+          Positioned.fill(child: RepaintBoundary(child: CustomPaint(painter: _SpeedoScale(top, major: top > 200 ? 50 : 20)))),
+          // The limit inside the arc's top right, under its numbers.
+          Positioned(
+            left: side / 2 + r * 0.3,
+            top: side / 2 - r * 0.46,
+            child: SizedBox.square(dimension: r * 0.22, child: FittedBox(child: _SpeedLimit(limit: o.speedLimit))),
+          ),
+          // The speed and its unit inside the arc on the left.
+          Positioned(
+            left: side / 2 - r * 0.62,
+            width: r * 0.42,
+            top: side / 2 - r * 0.04,
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              SizedBox(
+                height: r * 0.24,
+                child: FittedBox(
+                  child: Text(o.live ? o.speed.round().toString() : '—',
+                      style: TextStyle(
+                          fontSize: 100,
+                          height: 1,
+                          fontWeight: FontWeight.w300,
+                          color: o.live ? Colors.white : Colors.white24,
+                          fontFeatures: const [FontFeature.tabularFigures()])),
+                ),
+              ),
+              Text(o.speedUnit, style: const TextStyle(color: Colors.white60, letterSpacing: 2, fontSize: 11)),
+            ]),
+          ),
+          Positioned.fill(child: CustomPaint(painter: _SpeedoNeedle(f, lag))),
+                  ]))),
+          Positioned.fill(child: _Centre(obd: o, onGear: onGear, gearOnly: true)),
+        ]),
+      ));
+    });
+  }
+
+  /// The arc, canvas angles (clockwise from the right): 260° about the top,
+  /// its ends 40° under the level.
+  static const start = 140 * pi / 180, sweep = 260 * pi / 180;
+}
+
+/// A basic card, after the S3XY Dash's: the pack's power as a dash round a
+/// thin track over the top, filled inside from the top to it (draw clockwise,
+/// regen green the other way), the figure in the middle, and the battery as
+/// an arc round the range at its foot.
+class _PowerDial extends StatelessWidget {
+  const _PowerDial({required this.obd});
+
+  final Panda obd;
+  static const ends = 300.0; // kW either way: the arc's ends
+
+  @override
+  Widget build(BuildContext context) {
+    final o = obd, kw = o.live ? o.packKw : null;
+    return LayoutBuilder(builder: (context, c) {
+      final r = RingGauge.radiusIn(min(c.maxWidth, c.maxHeight));
+      return TweenAnimationBuilder<double>(
+        tween: Tween(end: ((kw ?? 0) / ends).clamp(-1.0, 1.0)),
+        duration: const Duration(milliseconds: 150),
+        builder: (context, p, _) => Stack(alignment: Alignment.center, children: [
+          Positioned.fill(child: CustomPaint(painter: _PowerFace(p, o.live ? o.socPct : null))),
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(kw == null ? '—' : kw.toStringAsFixed(1),
+                style: TextStyle(
+                    fontSize: r * 0.32,
+                    height: 1,
+                    fontWeight: FontWeight.w600,
+                    color: kw == null ? Colors.white38 : kw < 0 ? kRegen : Colors.white,
+                    fontFeatures: const [FontFeature.tabularFigures()])),
+            Text('kW', style: TextStyle(fontSize: r * 0.11, color: Colors.white54)),
+          ]),
+          Positioned(
+            bottom: c.maxHeight / 2 - r * 0.86,
+            child: Text(o.range == null ? '—' : '${o.range!.round()} ${o.rangeUnit}',
+                style: TextStyle(
+                    fontSize: r * 0.12, color: Colors.white70, fontFeatures: const [FontFeature.tabularFigures()])),
+          ),
+        ]),
+      );
+    });
+  }
+}
+
+/// [_PowerDial]'s marks: the power's track over the top and its dash from
+/// the top ([p] of the way to an end, negative regen), the battery's round the
+/// foot, from the left.
+class _PowerFace extends CustomPainter {
+  _PowerFace(this.p, this.soc);
+
+  final double p;
+  final double? soc;
+  // The battery's round the foot; the power's either way from the top, to
+  // a gap short of it.
+  static const _foot = 100 * pi / 180, _gap = 10 * pi / 180, _reach = pi - _foot / 2 - _gap;
+  static const _track = 0.035; // both tracks' width, of the radius
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero), r = RingGauge.radiusIn(size.shortestSide);
+    final rect = Rect.fromCircle(center: c, radius: r);
+    Paint line(Color color, double width) => Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = width
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    // The power: a white dash round its track from the top, and a fill from
+    // the top to it inside the track (green in regen), three quarters its
+    // depth.
+    final a = -pi / 2 + _reach * p, d = Offset(cos(a), sin(a)), color = p < 0 ? kRegen : kAccent;
+    const dash = 0.26, band = dash * 0.75; // of the radius
+    canvas.drawArc(rect, -pi / 2 - _reach, 2 * _reach, false, line(Colors.white24, r * _track)); // its track
+    if (p.abs() > 0.002) {
+      // Out over the track, so it hides under the fill.
+      canvas.drawArc(Rect.fromCircle(center: c, radius: r * (1 + _track / 2 - band / 2)), -pi / 2, _reach * p, false,
+          line(color, r * band)..strokeCap = StrokeCap.butt);
+    }
+    // The dash square at its inner end, round at the track.
+    final tip = c + d * r, foot = c + d * (r * (1 - dash)), drop = const Offset(1.5, 2);
+    canvas
+      ..drawLine(tip + drop, foot + drop,
+          line(Colors.black87, 5)
+            ..strokeCap = StrokeCap.butt
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5)) // its shadow
+      ..drawLine(tip, foot, line(Colors.white, 3)..strokeCap = StrokeCap.butt)
+      ..drawCircle(tip, 1.5, Paint()..color = Colors.white);
+    // The battery: from the foot's left, round under the range, to its right.
+    const from = pi / 2 + _foot / 2;
+    canvas.drawArc(rect, from, -_foot, false, line(Colors.white24, r * _track));
+    final f = (soc ?? 0).clamp(0.0, 100.0) / 100;
+    if (f > 0) canvas.drawArc(rect, from, -_foot * f, false, line(kAccent, r * _track));
+  }
+
+  @override
+  bool shouldRepaint(_PowerFace old) => old.p != p || old.soc != soc;
+}
+
+/// [_Speedo]'s scale: the arc, a dash every 10 up to [hi], longer and
+/// numbered every [major]. Drawn once.
+class _SpeedoScale extends CustomPainter {
+  _SpeedoScale(this.hi, {required this.major});
+
+  final int hi, major;
+  static const lo = 0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero), r = RingGauge.radiusIn(size.shortestSide), w = r * RingGauge.arcWidth;
+    canvas.drawArc(Rect.fromCircle(center: c, radius: r), _Speedo.start, _Speedo.sweep, false,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = w * 0.5
+          ..color = Colors.white24);
+    final inner = r - w / 2 - 3;
+    for (var v = lo; v <= hi; v += 10) {
+      final major = v % this.major == 0, a = _Speedo.start + _Speedo.sweep * (v - lo) / (hi - lo), d = Offset(cos(a), sin(a));
+      canvas.drawLine(c + d * inner, c + d * (inner - r * (major ? 0.09 : 0.045)),
+          Paint()
+            ..strokeWidth = major ? 2 : 1.2
+            ..color = major ? Colors.white70 : Colors.white38);
+      if (!major) continue;
+      final t = TextPainter(
+          text: TextSpan(
+              text: '$v', style: TextStyle(fontFamily: kFont, fontSize: r * 0.085, color: v < 0 ? kRegen : Colors.white70)),
+          textDirection: TextDirection.ltr)
+        ..layout();
+      t.paint(canvas, c + d * (inner - r * 0.17) - Offset(t.width / 2, t.height / 2));
+      t.dispose();
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SpeedoScale old) => old.hi != hi || old.major != major;
+}
+
+/// [_Speedo]'s needle on its hub, shadowed, and while it moves a short blue
+/// wedge trailing it (nothing at rest).
+class _SpeedoNeedle extends CustomPainter {
+  _SpeedoNeedle(this.f, this.lag);
+
+  final double f, lag; // of the arc: now, and where the trail has got to
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = size.center(Offset.zero), r = RingGauge.radiusIn(size.shortestSide), w = r * RingGauge.arcWidth;
+    final a = _Speedo.start + _Speedo.sweep * f, d = Offset(cos(a), sin(a));
+    final rect = Rect.fromCircle(center: c, radius: r);
+    // The trail: a short wedge behind the needle, hub to arc, fading to its
+    // tail, dimmer as the speed settles and gone once it holds.
+    final gap = f - lag;
+    if (gap.abs() > 0.002) {
+      // Four times the lag: real speeds change a few km/h a second, which
+      // the lag alone would leave a sliver.
+      final tail = (gap * 4).clamp(-0.12, 0.12), at = _Speedo.start + _Speedo.sweep * (f - tail);
+      final span = _Speedo.sweep * tail; // towards the needle: negative slowing down
+      final from = min(at, at + span), glow = kAccent.withValues(alpha: 0.45 * min(1.0, tail.abs() / 0.05));
+      canvas.drawPath(
+          Path()
+            ..moveTo(c.dx, c.dy)
+            ..arcTo(Rect.fromCircle(center: c, radius: r + w / 2), from, span.abs(), false)
+            ..close(),
+          Paint()
+            ..shader = SweepGradient(
+              endAngle: span.abs(),
+              colors: span > 0 ? [glow.withValues(alpha: 0), glow] : [glow, glow.withValues(alpha: 0)],
+              transform: GradientRotation(from),
+              tileMode: TileMode.decal,
+            ).createShader(rect));
+    }
+    final from = c, to = c + d * (r + w / 2); // from the hub, under it
+    canvas
+      ..drawLine(from + const Offset(1.5, 2), to + const Offset(1.5, 2),
+          Paint()
+            ..color = Colors.black87
+            ..strokeWidth = 6
+            ..strokeCap = StrokeCap.round
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3))
+      ..drawLine(from, to,
+          Paint()
+            ..color = Colors.white
+            ..strokeWidth = 3.5
+            ..strokeCap = StrokeCap.round)
+      // The hub it turns on: a dark cap, faintly rimmed.
+      ..drawCircle(c + const Offset(1.5, 2), r * 0.08,
+          Paint()
+            ..color = Colors.black87
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3))
+      ..drawCircle(c, r * 0.08, Paint()..color = const Color(0xFF2A2A2A))
+      ..drawCircle(c, r * 0.08,
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1
+            ..color = Colors.white24);
+  }
+
+  @override
+  bool shouldRepaint(_SpeedoNeedle old) => old.f != f || old.lag != lag;
+}
+
 class _SideColumn extends StatelessWidget {
   const _SideColumn({required this.children});
 
@@ -1113,11 +1386,13 @@ class _DialPainter extends CustomPainter {
 /// driver (up braking, down speeding up, right in a left turn), its figure
 /// beside it and this drive's peak under that. WiFi only.
 class _GBall extends StatefulWidget {
-  const _GBall({required this.obd, this.tall = false, this.listen = true});
+  const _GBall({required this.obd, this.dial, this.listen = true});
 
   final Panda obd;
   final bool listen; // hidden, it holds its place without redrawing
-  final bool tall; // basic's card: the ball as big as the room, the figures under it
+  /// Basic's card: in a [dial] square, its circle the power dial's
+  /// ([RingGauge.radiusIn]), the figures under the square.
+  final double? dial;
 
   @override
   State<_GBall> createState() => _GBallState();
@@ -1149,13 +1424,21 @@ class _GBallState extends State<_GBall> {
         Text('PEAK ${peak.toStringAsFixed(2)}',
             style: const TextStyle(fontSize: 12, letterSpacing: 0.8, color: Colors.white70)),
     ];
-    if (widget.tall) {
-      return Column(children: [
-        Expanded(child: Center(child: AspectRatio(aspectRatio: 1, child: ball))),
-        const SizedBox(height: 6),
-        Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic, spacing: 12, children: figures),
-      ]);
+    if (widget.dial case final side?) {
+      return SizedBox.square(
+        dimension: side,
+        child: Stack(clipBehavior: Clip.none, children: [
+          // The painter's circle is 1 in from its box: 6 in all, as the dial's.
+          Positioned.fill(child: Padding(padding: const EdgeInsets.all(5), child: ball)),
+          Positioned(
+            top: side + 6,
+            left: -40,
+            right: -40,
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic, spacing: 12, children: figures),
+          ),
+        ]),
+      );
     }
     return Row(mainAxisSize: MainAxisSize.min, children: [
       SizedBox.square(dimension: 72, child: ball),
@@ -1165,7 +1448,7 @@ class _GBallState extends State<_GBall> {
   }
 }
 
-/// Rings at 0.5 and 1 g on a crosshair; inside them, faint, how far this
+/// Rings at 0.5 and 1 g on a crosshair; inside them, in blue, how far this
 /// drive has reached each way; the trail fading in to the dot, held at the
 /// 1 g ring past it.
 class _GPainter extends CustomPainter {
@@ -1184,7 +1467,7 @@ class _GPainter extends CustomPainter {
     canvas.drawLine(c - Offset(r, 0), c + Offset(r, 0), stroke(Colors.white12, 1));
     canvas.drawLine(c - Offset(0, r), c + Offset(0, r), stroke(Colors.white12, 1));
     canvas.drawCircle(c, r / 2, stroke(Colors.white12, 1));
-    canvas.drawCircle(c, r, stroke(Colors.white24, 1.5));
+    canvas.drawCircle(c, r, stroke(Colors.white24, max(1.5, r * 0.035))); // as the power card's track, basic
     // The reach: a quarter ellipse between each pair of peaks.
     final (b, a, l) = (peaks.$1.clamp(0, 1) * r, peaks.$2.clamp(0, 1) * r, peaks.$3.clamp(0, 1) * r);
     if (a + b + l > 0) {
@@ -1196,15 +1479,18 @@ class _GPainter extends CustomPainter {
         ..conicTo(c.dx - l, c.dy + a, c.dx - l, c.dy, w)
         ..conicTo(c.dx - l, c.dy - b, c.dx, c.dy - b, w)
         ..close();
-      canvas.drawPath(p, Paint()..color = kAccent.withValues(alpha: 0.22));
+      canvas.drawPath(p, Paint()..color = kAccent.withValues(alpha: 0.4));
     }
     Offset at(Offset g) => c + (g.distance > 1 ? g / g.distance : g) * r;
+    // The dot and trail grow with the meter (basic's is the room's size),
+    // never under the full layout's 72 dp one's.
+    final k = max(1.0, r / 35);
     for (var i = 1; i < trail.length; i++) {
       canvas.drawLine(at(trail[i - 1]), at(trail[i]),
-          stroke(Colors.white.withValues(alpha: 0.7 * i / trail.length), 2)..strokeCap = StrokeCap.round);
+          stroke(Colors.white.withValues(alpha: 0.7 * i / trail.length), 2 * k)..strokeCap = StrokeCap.round);
     }
-    canvas.drawCircle(at(trail.last), 5, Paint()..color = Colors.black);
-    canvas.drawCircle(at(trail.last), 4, Paint()..color = Colors.white);
+    canvas.drawCircle(at(trail.last), 5 * k, Paint()..color = Colors.black);
+    canvas.drawCircle(at(trail.last), 4 * k, Paint()..color = Colors.white);
   }
 
   @override

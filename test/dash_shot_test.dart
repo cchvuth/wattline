@@ -364,7 +364,7 @@ void main() {
     // First cards: energy left (every draw and the pack's health: basic
     // ignores the full layout's switch, off here), the buttons right; no
     // route in the bar.
-    expect(find.byType(PageView), findsNWidgets(2));
+    expect(find.byType(PageView), findsNWidgets(3)); // the two card stacks and the ring
     expect(find.text('CLIMATE'), findsOneWidget);
     expect(find.text('DEGRADATION'), findsOneWidget);
     expect(find.text('12 V'), findsOneWidget);
@@ -381,14 +381,22 @@ void main() {
     expect(ap.dx, greaterThan(ring.center.dx + ring.width * 0.3));
     expect(ap.dy, lessThan(ring.center.dy - ring.height * 0.3));
     await shot('basic-1');
-    // One on: the drive left (with the air outside), the route right.
+    // One on: the drive left, the route right; the air outside on the ring,
+    // as in the full layout, not in the drive card.
     await swipe(left, 1);
     await swipe(right, 1);
     expect(find.textContaining('PEAK'), findsOneWidget);
-    expect(find.text('OUTSIDE'), findsOneWidget);
-    // The g-meter no bigger than before the cards ran the screen's height.
-    final ball = t.getRect(find.byWidgetPredicate((w) => w is CustomPaint && w.painter.runtimeType.toString() == '_GPainter'));
-    expect(ball.height, closeTo(161, 4));
+    expect(find.text('OUTSIDE'), findsNothing);
+    final air = t.getCenter(find.text('12°')); // city-turn's 12
+    expect(air.dx, lessThan(ring.center.dx - ring.width * 0.3)); // top left
+    expect(air.dy, closeTo(ap.dy, 1.5)); // level with the Autopilot icon
+    // The g-meter's circle as big as the room, centred (as the power card's
+    // dial: checked side by side below).
+    Rect painted(String type) =>
+        t.getRect(find.byWidgetPredicate((w) => w is CustomPaint && w.painter.runtimeType.toString() == type));
+    final ball = painted('_GPainter');
+    expect(ball.height, greaterThan(180));
+    expect(ball.center.dy, closeTo(t.getRect(left).center.dy, 2));
     expect(find.text('9 min'), findsOneWidget);
     // At arrival: the battery, and what the route takes of it now (52 %).
     expect(find.text('47% −5', findRichText: true), findsOneWidget);
@@ -434,6 +442,58 @@ void main() {
     await t.pumpAndSettle();
     expect(t.getRect(carImage).top, closeTo(forward, 0.5));
     await shot('basic-3');
+    // The ring swiped to the speedometer: one arc and a needle, the speed
+    // small on the inner left, the limit on the inner top right, the gear
+    // a little higher.
+    final gear = t.getCenter(find.text('D'));
+    final pages = find.byKey(const ValueKey('ringPages'));
+    await t.drag(pages, const Offset(0, -300));
+    await t.pumpAndSettle();
+    expect(find.byType(RingGauge), findsNothing);
+    final face = t.getRect(pages), figure = t.getRect(find.text('27'));
+    expect(figure.center.dx, lessThan(face.center.dx - face.width * 0.15));
+    final limit = t.getRect(find.text('50'));
+    expect(limit.center.dx, greaterThan(face.center.dx)); // the limit top right
+    expect(limit.center.dy, lessThan(face.center.dy));
+    expect(t.getCenter(find.text('D')).dx, closeTo(gear.dx, 0.5));
+    expect(t.getCenter(find.text('D')).dy, lessThan(gear.dy - 10));
+    await shot('basic-speedo');
+    // Speeding up: the needle trails a blue glow until the speed holds.
+    o
+      ..speed = 80
+      ..notifyListeners();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 250));
+    await shot('basic-speedo-moving');
+    await t.pumpAndSettle();
+    // Slowing: the glow trails on the needle's other side, falling, at a
+    // real drive's pace (here 2 km/h a frame).
+    for (var v = 78; v >= 60; v -= 2) {
+      o
+        ..speed = v.toDouble()
+        ..notifyListeners();
+      await t.pump(const Duration(milliseconds: 100));
+    }
+    await shot('basic-speedo-slowing');
+    await t.pumpAndSettle();
+    // The power card, last on a side: the pack's power round a circle, its
+    // figure in the middle.
+    o
+      ..packKw = 42
+      ..notifyListeners();
+    await swipe(right, 5);
+    final kw = t.getRect(find.text('42.0')), side = t.getRect(right);
+    expect(kw.center.dx, closeTo(side.center.dx, side.width * 0.15)); // in the right card, centred
+    expect(kw.center.dy, closeTo(side.center.dy, side.height * 0.1)); // in the middle
+    await shot('basic-power');
+    // The power card left, the speedometer, the g-meter right: the two
+    // circles alike, as big and as high.
+    await swipe(left, 6);
+    await swipe(right, -4);
+    final dial = painted('_PowerFace'), meter = painted('_GPainter');
+    expect(meter.height, closeTo(dial.height - 10, 1)); // the g-meter's painter sits 5 in
+    expect(meter.center.dy, closeTo(dial.center.dy, 1));
+    await shot('basic-dials');
     // The battery dial as big on screen as in the full layout, the figures'
     // rows a little bigger: neither scaled up with the rest of the card.
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));

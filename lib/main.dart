@@ -72,6 +72,7 @@ const kBasicCards = <Set<int>>[
   {0x3A1, 0x3C2, 0x31A, 0x2F3, 0x25A, 0x219, 0x129, 0x101, 0x3F6}, // car: belts, fans, tyres, path lines (moving: yaw), lamps
   {0x102, 0x103, 0x2E1, 0x25D, 0x273, 0x3E2, 0x243}, // buttons: doors, trunk, frunk, port, tilt, lights, recirc
   {0x238, 0x347, 0x3FD, 0x33A, 0x352}, // route: on a route, energy and minutes, battery now
+  {}, // the pack's power on a dial: the ring's own frames
 ];
 
 /// The basic layout's cards over the full layout's size on screen: the
@@ -119,6 +120,8 @@ class _DashPageState extends State<DashPage> {
   bool _minor = false; // the full layout's 12 V, other power and cell imbalance (off by default; basic shows them)
   late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
   int _cardLeft = 0, _cardRight = 3; // the card each side shows: energy, the buttons
+  int _ringPage = 0; // basic's ring: the power ring, or the speedometer
+  late final _ringPager = PageController(initialPage: _ringPage); // made at its first show, after [_load]
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
   int _lookMs = 3000; // the slider's look time; with the switch on the look has none
 
@@ -161,6 +164,7 @@ class _DashPageState extends State<DashPage> {
     // A card saved by a build with more of them: the last there is.
     _cardLeft = (prefs.getInt('cardLeft') ?? _cardLeft).clamp(0, kBasicCards.length - 1);
     _cardRight = (prefs.getInt('cardRight') ?? _cardRight).clamp(0, kBasicCards.length - 1);
+    _ringPage = (prefs.getInt('ringPage') ?? _ringPage).clamp(0, 1);
     _sparse = prefs.getBool('sparsePolling') ?? _sparse;
     _obd.sparse = _sparse;
     _applyCar(prefs.getString('car') ?? 'modelY7'); // the owner's, by default
@@ -654,6 +658,7 @@ class _DashPageState extends State<DashPage> {
 
   @override
   void dispose() {
+    _ringPager.dispose();
     _traceTimer?.cancel();
     _btBack?.cancel();
     _btButtons?.cancel();
@@ -982,7 +987,9 @@ class _DashPageState extends State<DashPage> {
   /// box's corner. [outside]: the air outside at its top left, level with
   /// the assist state and as clear of the arc (the full layout; basic has it
   /// on a card).
-  Widget _ring(Panda o, {bool outside = false}) => AspectRatio(
+  /// [pages]: the basic layout's, swiped up or down to the speedometer
+  /// ([_Speedo]) and kept; the assist state and the air outside stay put.
+  Widget _ring(Panda o, {bool outside = false, bool pages = false}) => AspectRatio(
         aspectRatio: 1,
         child: LayoutBuilder(builder: (context, box) {
           const size = _ApIcon.size;
@@ -991,7 +998,22 @@ class _DashPageState extends State<DashPage> {
           const a = -38 * pi / 180;
           final icon = _autopilot(o);
           return Stack(clipBehavior: Clip.none, children: [
-            Positioned.fill(child: _powerRing(o, smooth: _smooth, onGear: () => _setBasic(!_basic))),
+            Positioned.fill(
+                child: pages
+                    ? PageView(
+                        key: const ValueKey('ringPages'),
+                        scrollDirection: Axis.vertical,
+                        controller: _ringPager,
+                        onPageChanged: (p) async => (await SharedPreferences.getInstance()).setInt('ringPage', _ringPage = p),
+                        children: [
+                          _powerRing(o, smooth: _smooth, onGear: () => _setBasic(!_basic)),
+                          RepaintBoundary(
+                              child: ListenableBuilder(
+                                  listenable: o.fast,
+                                  builder: (context, _) => _Speedo(obd: o, onGear: () => _setBasic(!_basic)))),
+                        ],
+                      )
+                    : _powerRing(o, smooth: _smooth, onGear: () => _setBasic(!_basic))),
             if (icon != null)
               Positioned(
                 left: half + d * cos(a) - size / 2,
@@ -1037,17 +1059,15 @@ class _DashPageState extends State<DashPage> {
           _Pack(obd: o),
         ]),
       ])),
-      // Centred, with room above and below: the g-meter about 161 dp across.
-      _Card(FractionallySizedBox(
-        heightFactor: 0.79,
-        child: Column(children: [
-          _Lights(obd: o),
-          const SizedBox(height: 6),
-          Expanded(child: _GBall(obd: o, tall: true)),
-          const SizedBox(height: 6),
-          _statRow(context, 'OUTSIDE', o.outsideC == null ? '—' : _deg(o.outsideC!), color: _airColor(o.outsideC)),
-        ]),
-      )),
+      // The g-meter's circle the power card's: as wide and as high; the
+      // lamps over it, its figures under.
+      _Card(LayoutBuilder(builder: (context, box) {
+        final side = min(box.maxWidth, box.maxHeight);
+        return Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
+          _GBall(obd: o, dial: side),
+          Positioned(bottom: box.maxHeight / 2 + side / 2 + 4, child: _Lights(obd: o)),
+        ]);
+      })),
       _Card.fill((height) => _BasicCar(obd: o, height: height)),
       _Card(
           _fit(Row(mainAxisSize: MainAxisSize.min, spacing: 16, children: [
@@ -1058,6 +1078,12 @@ class _DashPageState extends State<DashPage> {
       // Centred in its card, which bounds its width so a long name wraps
       // rather than shrinks it.
       _Card(Center(child: _Nav(obd: o, bt: _bt, tall: true))),
+      // The pack's power and the battery on a dial, as big as the card.
+      _Card(Center(
+          child: AspectRatio(
+              aspectRatio: 1,
+              child: RepaintBoundary(
+                  child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _PowerDial(obd: o)))))),
     ];
     Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
     return Row(children: [
@@ -1071,7 +1097,7 @@ class _DashPageState extends State<DashPage> {
       // here, only the links and the buttons).
       IntrinsicWidth(
         child: Column(children: [
-          Expanded(child: _ring(o)),
+          Expanded(child: _ring(o, outside: true, pages: true)),
           Padding(padding: const EdgeInsets.only(top: 6), child: _controls(nav: false)),
         ]),
       ),

@@ -209,7 +209,7 @@ void main() {
     await t.tap(basic);
     await _frames(t);
     expect(prefs.getBool('basic'), isTrue);
-    expect(find.byType(PageView), findsNWidgets(2));
+    expect(find.byType(PageView), findsNWidgets(3)); // the two card stacks and the ring
     await t.tap(basic);
     await _frames(t);
     expect(prefs.getBool('basic'), isFalse);
@@ -433,7 +433,7 @@ void main() {
     expect(find.byType(PageView), findsNothing);
     await t.tap(find.text('D'));
     await _frames(t);
-    expect(find.byType(PageView), findsNWidgets(2));
+    expect(find.byType(PageView), findsNWidgets(3)); // the two card stacks and the ring
     expect(prefs.getBool('basic'), isTrue);
     await t.tap(find.text('D'));
     await _frames(t);
