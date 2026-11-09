@@ -67,6 +67,11 @@ Future<void> allowInstallUpdates() async {
   }
 }
 
+/// Whether an update that failed for [why] may work another time: GitHub
+/// busy (a 5xx such as its 504s, or 429) or the network dropping out, not an
+/// APK that is gone.
+bool worthRetrying(String why) => why == 'HTTP 429' || !(why.startsWith('HTTP 4') || why == 'no apk');
+
 /// Downloads and starts the install: null once Android's installer has it,
 /// or why not.
 Future<String?> installUpdate(Update u) async {

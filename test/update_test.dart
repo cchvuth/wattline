@@ -53,4 +53,15 @@ void main() {
         const MethodChannel('tesla_dash/net'), (call) async => throw PlatformException(code: 'gone', message: 'no activity'));
     expect(await installUpdate((version: '1.0.1', arm64: 'a', any: 'b')), 'no activity');
   });
+
+  // GitHub busy or the network gone: the dash offers to try again; an APK
+  // that is not there, no.
+  test('which failed updates are worth retrying', () {
+    for (final why in ['HTTP 504', 'HTTP 503', 'HTTP 500', 'HTTP 429', 'timeout', 'Read timed out']) {
+      expect(worthRetrying(why), isTrue, reason: why);
+    }
+    for (final why in ['HTTP 404', 'HTTP 403', 'no apk']) {
+      expect(worthRetrying(why), isFalse, reason: why);
+    }
+  });
 }

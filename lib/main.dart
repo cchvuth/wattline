@@ -530,11 +530,15 @@ class _DashPageState extends State<DashPage> {
     _obd.removeListener(_offerUpdate); // started from the settings: no offer at the next stop
     _say('Downloading Wattline ${u.version}…');
     final err = await installUpdate(u);
-    if (err != null) {
+    if (err == null) {
+      _handedOver = true;
+    } else if (worthRetrying(err)) {
+      _installing = false;
+      _say('Update download failed ($err): try again in a few minutes',
+          duration: const Duration(seconds: 10), action: SnackBarAction(label: 'RETRY', onPressed: _installUpdate));
+    } else {
       _installing = false;
       _say('Update not installed: $err');
-    } else {
-      _handedOver = true;
     }
   }
 
