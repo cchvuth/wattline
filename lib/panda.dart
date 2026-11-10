@@ -1292,7 +1292,8 @@ class Panda extends ChangeNotifier {
     if (id == 0x257) {
       _speedFrames++;
       final now = DateTime.now(), at = _speedAt;
-      if (at != null) _speedGap = max(_speedGap, now.difference(at).inMilliseconds);
+      // Not across a stall: an outage is no gap in the stream.
+      if (at != null && status == 'live') _speedGap = max(_speedGap, now.difference(at).inMilliseconds);
       _speedAt = now;
     }
     final f = frames.putIfAbsent(id, () => Frame(bus));
@@ -1518,7 +1519,7 @@ class Panda extends ChangeNotifier {
         case 'domeLight':
           domeLight = kDome[v.round()];
         case 'speedLimit':
-          speedLimit = v >= 155 ? null : v; // raw 31 = NONE
+          speedLimit = v == 0 || v >= 155 ? null : v; // raw 0 unknown, 31 none
         case 'outside':
           outsideC = v;
         case 'washer':
@@ -1638,7 +1639,7 @@ class Panda extends ChangeNotifier {
   String? _shownGear;
 
   @visibleForTesting
-  void fastTick() => _fast.fire();
+  void fastTick() => _disposed ? null : _fast.fire();
 
   @visibleForTesting
   void push() => _push();
@@ -1692,8 +1693,18 @@ class Panda extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _disposed = false;
+
+  // The disconnect in [dispose] finishes after it, and a Bluetooth blink
+  // timer may outlive it: neither tells a listener that is gone.
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _disposed = true;
     disconnect();
     _fast.dispose();
     super.dispose();

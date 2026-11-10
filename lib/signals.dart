@@ -224,7 +224,7 @@ const kSignals = <String, Sig>{
   // ID399 DAS_status. Raw units follow the car's display (kph or mph).
   // NOTE: this one lives on the chassis bus. If the sign stays blank, the
   // Commander is only forwarding the vehicle bus.
-  'speedLimit': Sig(0x399, 8, 5, scale: 5, sna: 0), // 31 also means "none"
+  'speedLimit': Sig(0x399, 8, 5, scale: 5), // 0 unknown, 31 none: both clear the sign
 
   // ID399 DAS_status, chassis bus.
   // See kAutopilot. No sna: 15 (SNA) maps to null and clears the pill.

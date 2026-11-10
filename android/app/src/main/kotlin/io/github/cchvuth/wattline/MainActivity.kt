@@ -41,6 +41,7 @@ class MainActivity : FlutterActivity() {
     private val cm by lazy { getSystemService(ConnectivityManager::class.java) }
     private val wm by lazy { applicationContext.getSystemService(WifiManager::class.java) }
     private var callback: ConnectivityManager.NetworkCallback? = null
+    private var pendingReply: ((Boolean) -> Unit)? = null // the join waiting on [callback]
     private var channel: MethodChannel? = null
 
     /**
@@ -117,6 +118,13 @@ class MainActivity : FlutterActivity() {
                         call.argument<String>("password"),
                         result,
                     )
+                    // Dart says when the car moves: Android's install
+                    // confirmation waits for a stop, as it closes the dash.
+                    "moving" -> {
+                        moving = call.arguments as? Boolean ?: false
+                        if (!moving && inFront) pendingConfirm?.let { pendingConfirm = null; startActivity(it) }
+                        result.success(null)
+                    }
                     "unbind" -> { unbind(); stopLook?.invoke(); result.success(null) }
                     "wifiOn" -> result.success(wm.isWifiEnabled)
                     // The app's own external folder: adb reads it, no permission.
@@ -305,11 +313,12 @@ class MainActivity : FlutterActivity() {
     private var installStatus: BroadcastReceiver? = null
     private var inFront = false
     private var pendingConfirm: Intent? = null
+    private var moving = false
 
     override fun onResume() {
         super.onResume()
         inFront = true
-        pendingConfirm?.let { pendingConfirm = null; startActivity(it) }
+        if (!moving) pendingConfirm?.let { pendingConfirm = null; startActivity(it) }
     }
 
     override fun onPause() {
@@ -327,8 +336,9 @@ class MainActivity : FlutterActivity() {
                         @Suppress("DEPRECATION")
                         val confirm = intent.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
                             ?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        // From the background Android blocks it: shown when the app is back.
-                        if (inFront) confirm?.let { startActivity(it) } else pendingConfirm = confirm
+                        // From the background Android blocks it, and on the move it
+                        // would close the dash: shown when the app is back and stopped.
+                        if (inFront && !moving) confirm?.let { startActivity(it) } else pendingConfirm = confirm
                     }
                     PackageInstaller.STATUS_SUCCESS -> {}
                     else -> channel?.invokeMethod(
@@ -362,11 +372,14 @@ class MainActivity : FlutterActivity() {
     private fun bindWifi(ssid: String?, password: String?, result: MethodChannel.Result) {
         unbind()
         var replied = false
-        fun reply(ok: Boolean) {
-            if (replied) return
-            replied = true
-            runOnUiThread { result.success(ok) }
+        // Checked on the main thread: the network callback and [unbind] may race.
+        fun reply(ok: Boolean) = runOnUiThread {
+            if (!replied) {
+                replied = true
+                result.success(ok)
+            }
         }
+        pendingReply = ::reply
 
         // A fresh builder each time: setNetworkSpecifier changes the one it
         // is called on, and the fallback must ask for any WiFi.
@@ -500,6 +513,8 @@ class MainActivity : FlutterActivity() {
         cm.bindProcessToNetwork(null)
         callback?.let { runCatching { cm.unregisterNetworkCallback(it) } }
         callback = null
+        pendingReply?.invoke(false) // its callback gone, the join would never answer
+        pendingReply = null
     }
 
     override fun onDestroy() {

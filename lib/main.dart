@@ -190,12 +190,14 @@ class _DashPageState extends State<DashPage> {
         ..tpRR ??= v[3];
     }
     _tyres = [_obd.tpFL, _obd.tpFR, _obd.tpRL, _obd.tpRR];
-    if (mounted) setState(() {});
+    if (!mounted) return; // closed while loading: nothing to listen for
+    setState(() {});
     // The first launch's pages until all are through: closed midway (the
     // phone may close the dash while the S3XY app is open), they come again.
     final firstRun = prefs.getString('car') == null || prefs.getBool('setupDone') == false;
     _obd.addListener(_linksChanged);
     _obd.addListener(_saveTyres);
+    _obd.addListener(_tellMoving);
     _bt.addListener(_linksChanged);
     // Back in front (phone woke, or the S3XY app was used): try both now.
     _life = AppLifecycleListener(onResume: () {
@@ -327,6 +329,7 @@ class _DashPageState extends State<DashPage> {
     if (f == null || !mounted) return; // no folder (tests): no trace
     _traceFile = f;
     await loadBuild();
+    if (!mounted) return;
     _trace('start: build=$diagBuild sparse=$_sparse car=${_obd.thirdRow ? 7 : 5}${_obd.rwd ? 'rwd' : 'awd'} wifiFirst=$_wifiFirst look=${_lookMs}ms settle=${_settleMs}ms buttons=${_buttonsMs}ms '
         'data=${_rejoinMs}ms back=${_backMs}ms');
     _traceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -450,6 +453,7 @@ class _DashPageState extends State<DashPage> {
   /// Which layout, on the first launch (the settings switch it later):
   /// everything at once, or basic's bigger cards.
   Future<void> _askLayout() async {
+    if (!mounted) return;
     // Each as it looks, to tap, as the car's question has its pictures.
     final basic = await showDialog<bool>(
       context: context,
@@ -625,8 +629,13 @@ class _DashPageState extends State<DashPage> {
       _say('Shift to P to update'); // Android's installer closes the dash
       return;
     }
+    // The tap's word on moving, as the guard's: a link lost on the move and
+    // never back would hold Android's confirmation for good ([_tellMoving]).
+    if (_movingTold) setMoving(_movingTold = false);
     _installOnReturn = false;
+    _installing = true; // across the check too: a second tap is turned away
     if (!await canInstallUpdates()) {
+      _installing = false;
       _installOnReturn = true;
       _say('Allow Wattline to install updates, then come back here');
       await allowInstallUpdates();
@@ -634,7 +643,6 @@ class _DashPageState extends State<DashPage> {
     }
     // Busy until Android's installer is done: it replaces the app, or says
     // why not ([Panda.onUpdateFailed]); a download that fails says so here.
-    _installing = true;
     _handedOver = false;
     _obd.removeListener(_offerUpdate); // started from the settings: no offer at the next stop
     _say('Downloading Wattline ${u.version}…');
@@ -652,6 +660,16 @@ class _DashPageState extends State<DashPage> {
   }
 
   bool _installOnReturn = false, _installing = false, _handedOver = false;
+
+  bool _movingTold = false;
+
+  /// Android's install confirmation waits while the car moves ([setMoving]):
+  /// a link lost on the move is no stop, so only a live gear changes it.
+  void _tellMoving() {
+    if (!_obd.live) return;
+    final m = !_obd.parked;
+    if (m != _movingTold) setMoving(_movingTold = m);
+  }
 
   /// A message in the snackbar, in place of the last; behind the approval
   /// prompt while that is up, as the car is waiting on it.
@@ -1171,12 +1189,13 @@ class _DashPageState extends State<DashPage> {
         ]),
       ])),
       // The g-meter's circle the power card's: as wide and as high; the
-      // lamps over it, its figures under.
+      // lamps over it, its figures under. WiFi only, as in the full layout:
+      // Bluetooth has no g, and a stalled stream would freeze the dot.
       _Card(LayoutBuilder(builder: (context, box) {
         // Room kept above and below for the lamps and the figures.
         final side = max(0.0, min(box.maxWidth, box.maxHeight - 96));
         return Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
-          _GBall(obd: o, dial: side),
+          if (o.wifiLive) _GBall(obd: o, dial: side),
           Positioned(left: 0, right: 0, bottom: box.maxHeight / 2 + side / 2 + 4, child: _Lights(obd: o)),
         ]);
       })),
@@ -1374,7 +1393,7 @@ Widget _powerRing(Panda o, {required bool smooth, VoidCallback? onGear}) => Repa
           rearKw: o.live ? o.rearKw : null,
           rearOnly: o.rwd,
           pedalPct: o.live ? o.pedalPct : null,
-          brakePct: o.live ? o.brakePct : null,
+          brakePct: o.wifiLive ? o.brakePct : null, // WiFi's alone: frozen once it stalls
           regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
           child: _Centre(obd: o, onGear: onGear),
         ),

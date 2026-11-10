@@ -71,7 +71,7 @@ class _Centre extends StatelessWidget {
               top: c.maxHeight * 0.1,
               child: SizedBox.square(
                 dimension: c.maxHeight * 0.16,
-                child: FittedBox(child: _SpeedLimit(limit: obd.speedLimit)),
+                child: FittedBox(child: _SpeedLimit(limit: obd.live ? obd.speedLimit : null)),
               ),
             ),
           // Only the gear engaged, in the gap the ring leaves at its foot,
@@ -89,7 +89,7 @@ class _Centre extends StatelessWidget {
                       style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w700,
-                          color: const {'P', 'R', 'N', 'D'}.contains(o.gear) ? Colors.white : Colors.white38)),
+                          color: o.live && const {'P', 'R', 'N', 'D'}.contains(o.gear) ? Colors.white : Colors.white38)),
                 ),
               ),
             ),
@@ -237,7 +237,7 @@ class _Speedo extends StatelessWidget {
                   Positioned(
                     left: side / 2 + r * 0.3,
                     top: side / 2 - r * 0.46,
-                    child: SizedBox.square(dimension: r * 0.22, child: FittedBox(child: _SpeedLimit(limit: o.speedLimit))),
+                    child: SizedBox.square(dimension: r * 0.22, child: FittedBox(child: _SpeedLimit(limit: o.live ? o.speedLimit : null))),
                   ),
                   // The speed (or the charge) and its unit inside the arc on the left.
                   Positioned(
@@ -448,7 +448,8 @@ class _SpeedoNeedle extends CustomPainter {
     if (gap.abs() > 0.002) {
       // Four times the lag: real speeds change a few km/h a second, which
       // the lag alone would leave a sliver.
-      final tail = (gap * 4).clamp(-0.12, 0.12), at = _Speedo.start + _Speedo.sweep * (f - tail);
+      // Kept on the scale: none of it under 0 pulling away, or past the top.
+      final tail = (gap * 4).clamp(-0.12, 0.12).clamp(f - 1, f), at = _Speedo.start + _Speedo.sweep * (f - tail);
       final span = _Speedo.sweep * tail; // towards the needle: negative slowing down
       final from = min(at, at + span), glow = kAccent.withValues(alpha: 0.45 * min(1.0, tail.abs() / 0.05));
       canvas.drawPath(
@@ -1679,9 +1680,10 @@ class _Lights extends StatelessWidget {
     final grip = o.wifiLive && o.frames.containsKey(0x2B6) && (o.gripLit || o.tcMode != null);
     // Four lamps where three fitted: shrinks rather than overflows.
     return FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [
-      if (o.drl == true) lamp('DRL', Glyph.drl),
-      if (o.lowBeam == true) lamp('LOW', Glyph.lowBeam),
-      if (o.highBeam == true) lamp('HIGH', Glyph.highBeam, kAccent),
+      // Not after the link: a stall would leave them lit.
+      if (o.live && o.drl == true) lamp('DRL', Glyph.drl),
+      if (o.live && o.lowBeam == true) lamp('LOW', Glyph.lowBeam),
+      if (o.live && o.highBeam == true) lamp('HIGH', Glyph.highBeam, kAccent),
       if (grip) lamp(o.tcMode ?? 'GRIP', Glyph.grip, o.gripLit && !o.gripHeld ? kCold : kWarn),
     ]));
   }

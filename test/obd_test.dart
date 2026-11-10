@@ -488,6 +488,11 @@ void main() {
     expect(p.handsOn, 4);
     p.onFrame(0x399, 0, [0, 0, 0, 0, 0, 0x3C, 0, 0]);
     expect(p.handsOn, isNull);
+    // The limit: 50, then unknown (0) clears the sign rather than holding it.
+    p.onFrame(0x399, 0, [0, 0x0A, 0, 0, 0, 0, 0, 0]);
+    expect(p.speedLimit, 50);
+    p.onFrame(0x399, 0, [0, 0, 0, 0, 0, 0, 0, 0]);
+    expect(p.speedLimit, isNull);
 
     // Without WiFi, the Commander's: -3 °C out, 24 kW regen, the coldest
     // cells at 3.5 °C and heating, the nag chiming (sint32 zigzagged).

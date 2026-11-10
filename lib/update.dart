@@ -53,10 +53,14 @@ Future<Update?> checkUpdate(String running) async {
 Future<bool> canInstallUpdates() async {
   try {
     return await _net.invokeMethod<bool>('canInstall') ?? false;
-  } on PlatformException {
-    return false;
+  } catch (_) {
+    return false; // no native side either: [_installUpdate] must not stay busy
   }
 }
+
+/// Whether the car moves, for Android's install confirmation: held back
+/// until a stop, as it closes the dash.
+void setMoving(bool moving) => _net.invokeMethod('moving', moving).catchError((_) => null);
 
 /// Opens Android's "install unknown apps" switch for this app.
 Future<void> allowInstallUpdates() async {

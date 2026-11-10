@@ -137,6 +137,7 @@ class Commander extends ChangeNotifier {
   bool _asked = false; // the owner asked for the link: a refusal may ask for the double-press
   int _asks = 0; // retries left of an owner's ask, should it stumble before the Commander answers
   bool _parked = false; // refused, or not approved: only the owner tries again
+  bool _onAsked = false; // a press just offered to switch Bluetooth on
   static const _lend = Duration(seconds: 30);
   DateTime _lastScan = DateTime.fromMillisecondsSinceEpoch(0);
 
@@ -189,6 +190,7 @@ class Commander extends ChangeNotifier {
         Platform.isAndroid &&
         FlutterBluePlus.adapterStateNow == BluetoothAdapterState.off) {
       FlutterBluePlus.turnOn().catchError((_) {});
+      _onAsked = true; // the dial this starts asks no second time
     }
     if (!_on || ready) return;
     if (ask) {
@@ -225,7 +227,7 @@ class Commander extends ChangeNotifier {
   /// Presses [a] once (TryAction).
   Future<void> tryAction(S3xyAction a) async {
     if (!ready) throw CommanderError(status);
-    if (busy) throw CommanderError('busy with the last press');
+    if (busy) throw CommanderError('busy — press again'); // a press, or the subscribe ([_refit])
     busy = true;
     notifyListeners();
     final int s;
@@ -302,7 +304,9 @@ class Commander extends ChangeNotifier {
     final was = ready || _dialing;
     // Left idle on purpose (handed back to the S3XY Dash, or parked after a
     // refusal) stays idle: only a link that was up or retrying comes back.
-    _redial = was || (_retry?.isActive ?? false);
+    // Off for want of the phone's Bluetooth is not idle on purpose: it may
+    // come on meanwhile, unheard while paused.
+    _redial = was || (_retry?.isActive ?? false) || _link == BtLink.off;
     _on = false;
     _paused = true;
     _gen++; // an attempt under way stops at its next step
@@ -310,7 +314,8 @@ class Commander extends ChangeNotifier {
     _retry?.cancel();
     _refitTimer?.cancel();
     await _teardown();
-    if (_redial) _set(BtLink.paused, 'stepped aside for the WiFi stream');
+    // The phone's Bluetooth off stays said: that is what to fix.
+    if (_redial && _link != BtLink.off) _set(BtLink.paused, 'stepped aside for the WiFi stream');
     return was;
   }
 
@@ -354,9 +359,10 @@ class Commander extends ChangeNotifier {
             onTimeout: () => BluetoothAdapterState.unknown);
     if (state == BluetoothAdapterState.off) {
       // Asked once per connect, so the retries do not nag.
-      if (Platform.isAndroid && _attempt == 0) {
+      if (Platform.isAndroid && _attempt == 0 && !_onAsked) {
         FlutterBluePlus.turnOn().catchError((_) {});
       }
+      _onAsked = false;
       throw CommanderError('bluetooth is off', BtLink.off);
     }
     final dev = await _find();
@@ -453,6 +459,7 @@ class Commander extends ChangeNotifier {
         : '';
 
     ready = true;
+    _parked = false; // approved after all: reconnects on its own again
     _set(_link, 'ready'); // [link] says what the session carries
     // Borrowed: back to the Dash after the last press. Unasked (the Dash
     // came during the setup, by push): right away.
