@@ -10,7 +10,7 @@ typedef Change = ({String version, String title, List<String> notes, List<String
 
 const kChangelog = <Change>[
   (
-    version: '1.0.10',
+    version: '1.1.0',
     title: "What's new",
     notes: [
       "This list: after an update, what changed since the version you last ran, with screenshots; any time "
