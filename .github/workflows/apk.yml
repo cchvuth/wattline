@@ -33,7 +33,8 @@ jobs:
       # A version tag must match the pubspec's version, or installed phones
       # would offer the same "update" forever.
       - if: github.ref_type == 'tag'
-        run: grep -q "^version: ${GITHUB_REF_NAME#v}+" pubspec.yaml
+        run: |
+          grep -q "^version: ${GITHUB_REF_NAME#v}+" pubspec.yaml
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test

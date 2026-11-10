@@ -10,6 +10,19 @@ typedef Change = ({String version, String title, List<String> notes, List<String
 
 const kChangelog = <Change>[
   (
+    version: '1.1.1',
+    title: 'Bug fixes',
+    notes: [
+      "Updates: Android's install confirmation waits until the car stops",
+      "The speed limit sign clears when the car doesn't know the limit",
+      'After a WiFi dropout, the brake line, gear, speed limit and lamps no longer look live',
+      'Basic layout: the g-meter shows only with the WiFi stream (Bluetooth has no g)',
+      "Bluetooth: comes back after the phone's Bluetooth is switched on while WiFi starts; one prompt to switch "
+          'it on per press',
+    ],
+    shots: [],
+  ),
+  (
     version: '1.1.0',
     title: "What's new",
     notes: [
