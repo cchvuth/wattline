@@ -72,16 +72,23 @@ const kBasicCards = <Set<int>>[
   {0x3A1, 0x3C2, 0x31A, 0x2F3, 0x25A, 0x219, 0x129, 0x101, 0x3F6}, // car: belts, fans, tyres, path lines (moving: yaw), lamps
   {0x102, 0x103, 0x2E1, 0x25D, 0x273, 0x3E2, 0x243}, // buttons: doors, trunk, frunk, port, tilt, lights, recirc
   {0x238, 0x347, 0x3FD, 0x33A, 0x352}, // route: on a route, energy and minutes, battery now
-  {}, // the pack's power on a dial: the ring's own frames
+  {0x33A}, // power: the pack's draw (the ring's frames), the battery and range
 ];
 
 /// The basic layout's cards over the full layout's size on screen: the
 /// figures and the route a little bigger, the buttons more.
 const kBasicFigures = 1.1, kBasicButtons = 1.22;
 
-/// The ids the basic layout has no use for with these two cards showing.
-Set<int> basicSkip(int left, int right) {
-  final need = {...kBasicBase, ...kBasicCards[left], ...kBasicCards[right]};
+/// The power ring's alone and streamed: the brake torque (44 a second), not
+/// asked for while basic's ring shows the speedometer. (The regen cap is
+/// polled and slow: kept, so it is fresh on the swipe back.)
+const kPowerRingOnly = {0x185};
+
+/// The ids the basic layout has no use for with these two cards showing
+/// ([speedo]: and the speedometer on the ring).
+Set<int> basicSkip(int left, int right, {bool speedo = false}) {
+  // Off the ring's own ids only: a card that needs one keeps it.
+  final need = {...speedo ? kBasicBase.difference(kPowerRingOnly) : kBasicBase, ...kBasicCards[left], ...kBasicCards[right]};
   return {for (final id in kSubscribeIds) if (!need.contains(id)) id};
 }
 
@@ -121,7 +128,6 @@ class _DashPageState extends State<DashPage> {
   late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
   int _cardLeft = 0, _cardRight = 3; // the card each side shows: energy, the buttons
   int _ringPage = 0; // basic's ring: the power ring, or the speedometer
-  late final _ringPager = PageController(initialPage: _ringPage); // made at its first show, after [_load]
   bool _sparse = true; // slow ids polled rather than streamed (see Panda.sparse)
   int _lookMs = 3000; // the slider's look time; with the switch on the look has none
 
@@ -164,7 +170,7 @@ class _DashPageState extends State<DashPage> {
     // A card saved by a build with more of them: the last there is.
     _cardLeft = (prefs.getInt('cardLeft') ?? _cardLeft).clamp(0, kBasicCards.length - 1);
     _cardRight = (prefs.getInt('cardRight') ?? _cardRight).clamp(0, kBasicCards.length - 1);
-    _ringPage = (prefs.getInt('ringPage') ?? _ringPage).clamp(0, 1);
+    _ringPage = (prefs.getInt('ringPage') ?? _ringPage).clamp(0, 1); // the power ring or the speedometer
     _sparse = prefs.getBool('sparsePolling') ?? _sparse;
     _obd.sparse = _sparse;
     _applyCar(prefs.getString('car') ?? 'modelY7'); // the owner's, by default
@@ -658,7 +664,6 @@ class _DashPageState extends State<DashPage> {
 
   @override
   void dispose() {
-    _ringPager.dispose();
     _traceTimer?.cancel();
     _btBack?.cancel();
     _btButtons?.cancel();
@@ -982,11 +987,13 @@ class _DashPageState extends State<DashPage> {
   Widget _controls({bool nav = true}) =>
       _Controls(obd: _obd, bt: _bt, onWifi: _settings, onBt: _btStatus, onMaps: _maps, nav: nav);
 
+  /// A page the basic layout shows, kept for the next start.
+  Future<void> _keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
+
   /// The speed and power ring, the same in both layouts, with the assist
   /// state at its top right: just outside the ring's arc, a little below its
   /// box's corner. [outside]: the air outside at its top left, level with
-  /// the assist state and as clear of the arc (the full layout; basic has it
-  /// on a card).
+  /// the assist state and as clear of the arc (both layouts; not compact).
   /// [pages]: the basic layout's, swiped up or down to the speedometer
   /// ([_Speedo]) and kept; the assist state and the air outside stay put.
   Widget _ring(Panda o, {bool outside = false, bool pages = false}) => AspectRatio(
@@ -997,23 +1004,26 @@ class _DashPageState extends State<DashPage> {
           final half = box.maxWidth / 2, d = RingGauge.outerRadius(box.maxWidth) + size / 2 + 5;
           const a = -38 * pi / 180;
           final icon = _autopilot(o);
+          void gear() => _setBasic(!_basic); // the gear's tap, on every face
           return Stack(clipBehavior: Clip.none, children: [
             Positioned.fill(
                 child: pages
-                    ? PageView(
+                    ? _Pages(
                         key: const ValueKey('ringPages'),
-                        scrollDirection: Axis.vertical,
-                        controller: _ringPager,
-                        onPageChanged: (p) async => (await SharedPreferences.getInstance()).setInt('ringPage', _ringPage = p),
+                        initial: _ringPage,
+                        onPage: (p) => setState(() {
+                          _keep('ringPage', _ringPage = p);
+                          _fitSubscription(); // the speedometer needs less
+                        }),
                         children: [
-                          _powerRing(o, smooth: _smooth, onGear: () => _setBasic(!_basic)),
+                          _powerRing(o, smooth: _smooth, onGear: gear),
                           RepaintBoundary(
                               child: ListenableBuilder(
                                   listenable: o.fast,
-                                  builder: (context, _) => _Speedo(obd: o, onGear: () => _setBasic(!_basic)))),
+                                  builder: (context, _) => _Speedo(obd: o, onGear: gear))),
                         ],
                       )
-                    : _powerRing(o, smooth: _smooth, onGear: () => _setBasic(!_basic))),
+                    : _powerRing(o, smooth: _smooth, onGear: gear)),
             if (icon != null)
               Positioned(
                 left: half + d * cos(a) - size / 2,
@@ -1034,13 +1044,13 @@ class _DashPageState extends State<DashPage> {
   /// Only what is on screen, in the basic layout beside nothing else; worked
   /// out again only when that changes.
   void _fitSubscription() {
-    final now = (_basic && MediaQuery.sizeOf(context).width >= 700, _cardLeft, _cardRight);
+    final now = (_basic && MediaQuery.sizeOf(context).width >= 700, _cardLeft, _cardRight, _ringPage == 1);
     if (now == _fitted) return;
     _fitted = now;
-    _obd.skip = now.$1 ? basicSkip(_cardLeft, _cardRight) : const {};
+    _obd.skip = now.$1 ? basicSkip(_cardLeft, _cardRight, speedo: now.$4) : const {};
   }
 
-  (bool, int, int)? _fitted;
+  (bool, int, int, bool)? _fitted;
 
   /// The basic layout: the ring between two stacks of cards (energy, drive,
   /// the car, the buttons, the route), one of each showing, swiped up or down
@@ -1062,10 +1072,11 @@ class _DashPageState extends State<DashPage> {
       // The g-meter's circle the power card's: as wide and as high; the
       // lamps over it, its figures under.
       _Card(LayoutBuilder(builder: (context, box) {
-        final side = min(box.maxWidth, box.maxHeight);
+        // Room kept above and below for the lamps and the figures.
+        final side = max(0.0, min(box.maxWidth, box.maxHeight - 96));
         return Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
           _GBall(obd: o, dial: side),
-          Positioned(bottom: box.maxHeight / 2 + side / 2 + 4, child: _Lights(obd: o)),
+          Positioned(left: 0, right: 0, bottom: box.maxHeight / 2 + side / 2 + 4, child: _Lights(obd: o)),
         ]);
       })),
       _Card.fill((height) => _BasicCar(obd: o, height: height)),
@@ -1085,11 +1096,10 @@ class _DashPageState extends State<DashPage> {
               child: RepaintBoundary(
                   child: ListenableBuilder(listenable: o.fast, builder: (context, _) => _PowerDial(obd: o)))))),
     ];
-    Future<void> keep(String key, int page) async => (await SharedPreferences.getInstance()).setInt(key, page);
     return Row(children: [
       Expanded(child: _Cards(key: const ValueKey('left'), cards: cards, initial: _cardLeft, dotsLeft: true,
           onPage: (p) {
-            keep('cardLeft', _cardLeft = p);
+            _keep('cardLeft', _cardLeft = p);
             _fitSubscription();
           })),
       // The ring with the bar under it, as wide as the ring: the cards
@@ -1103,7 +1113,7 @@ class _DashPageState extends State<DashPage> {
       ),
       Expanded(child: _Cards(key: const ValueKey('right'), cards: cards, initial: _cardRight,
           onPage: (p) {
-            keep('cardRight', _cardRight = p);
+            _keep('cardRight', _cardRight = p);
             _fitSubscription();
           })),
     ]);
@@ -1151,8 +1161,9 @@ class _DashPageState extends State<DashPage> {
                 // ring's centre as it goes down; no figure. Within the safe
                 // area as the ring is: edge to edge, the camera's cutout
                 // widens one side and the screen's centre is not the ring's.
-                // Not on a rear-motor car: its ring has the pedal.
-                if (live && !o.rwd)
+                // Not on a rear-motor car: its ring has the pedal (but not
+                // basic's speedometer face).
+                if (live && (!o.rwd || (_basic && _ringPage == 1)))
                   IgnorePointer(
                     child: RepaintBoundary(child: ListenableBuilder(
                       listenable: o.fast,

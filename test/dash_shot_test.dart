@@ -458,6 +458,23 @@ void main() {
     expect(t.getCenter(find.text('D')).dx, closeTo(gear.dx, 0.5));
     expect(t.getCenter(find.text('D')).dy, lessThan(gear.dy - 10));
     await shot('basic-speedo');
+    // The washer low (or the cruise, or charging) line shows here too.
+    o
+      ..washerLow = true
+      ..notifyListeners();
+    await t.pump();
+    expect(find.text('WASHER LOW'), findsOneWidget);
+    await shot('basic-speedo-washer');
+    o
+      ..washerLow = false
+      ..notifyListeners();
+    await t.pump();
+    // To the full layout by the gear and back: still the speedometer.
+    await t.tap(find.text('D'));
+    await t.pumpAndSettle();
+    await t.tap(find.text('D'));
+    await t.pumpAndSettle();
+    expect(find.byType(RingGauge), findsNothing);
     // Speeding up: the needle trails a blue glow until the speed holds.
     o
       ..speed = 80

@@ -1052,6 +1052,12 @@ void main() {
     expect(skip, isNot(contains(0x321))); // washer low shows under the speed whatever the cards
     expect(skip, isNot(contains(0x33A))); // the battery
     expect(skip, isNot(contains(0x102))); // the doors' buttons
+    expect(kBasicCards.last, contains(0x33A)); // the power card's battery and range
+    // The ring on the speedometer: the brake goes too.
+    expect(basicSkip(0, 3, speedo: true), contains(0x185));
+    expect(basicSkip(0, 3, speedo: true), isNot(contains(0x252))); // polled: kept fresh for the swipe back
+    expect(basicSkip(0, 3), isNot(contains(0x185)));
+    expect(basicSkip(0, 3, speedo: true), isNot(contains(0x132))); // the ring's pack power stays: other cards use it
   });
 
   // All ones is "not available" (a module booting): no full brake arc (and no

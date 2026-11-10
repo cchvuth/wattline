@@ -1128,6 +1128,11 @@ class Panda extends ChangeNotifier {
     if (setEquals(v, _skip)) return;
     final back = _skip.difference(v), drop = v.difference(_skip);
     _skip = Set.unmodifiable(v);
+    // A brake reading would hold while its frame is off: none rather.
+    if (drop.contains(0x185)) {
+      _brakeNm.clear();
+      brakePct = null;
+    }
     _skipAt = DateTime.now();
     if (_all) return;
     _sendIds(0x0e, drop.toList());

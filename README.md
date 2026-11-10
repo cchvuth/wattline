@@ -72,8 +72,8 @@ drive (lights and grip, g-meter), the car (raised in reverse to show the path
 lines behind it), the buttons, the route, and power (the pack's draw round a
 dial, regen green, the battery and range at its foot). Either side can show
 any card, and each side remembers its own. The ring swipes up or down too, to
-a speedometer: one arc to 250 km/h with a needle that trails a blue glow as
-the speed changes.
+a speedometer: one arc to 250 km/h (160 mph) with a needle that trails a blue
+glow as the speed changes.
 
 | Energy and buttons | Drive and route | The car and energy |
 |---|---|---|
