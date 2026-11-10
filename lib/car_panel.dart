@@ -51,7 +51,7 @@ class _CarPanelState extends State<CarPanel> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('More actions')),
+        appBar: AppBar(title: const Text('Car controls')),
         body: ListView(
           padding: const EdgeInsets.all(16),
           children: [

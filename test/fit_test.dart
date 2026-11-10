@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tesla_dash/changelog.dart';
 import 'package:tesla_dash/commander.dart';
 import 'package:tesla_dash/diag.dart';
 import 'package:tesla_dash/gauge.dart';
@@ -84,6 +85,49 @@ void main() {
       ..devicePixelRatio = 1;
   });
   tearDown(() => TestWidgetsFlutterBinding.instance.platformDispatcher.implicitView!.reset());
+
+  // What's new, every release in it with its screenshots: it scrolls with a
+  // bar to show it, and its button stays in view.
+  testWidgets("what's new after an update", (t) async {
+    await t.pumpWidget(MaterialApp(
+        theme: kTheme,
+        home: Builder(
+            builder: (context) => TextButton(
+                onPressed: () => showWhatsNew(context, changesSince('1.0.0', kChangelog.first.version)),
+                child: const Text('open')))));
+    await t.tap(find.text('open'));
+    await _frames(t);
+    expect(find.text("What's new"), findsOneWidget);
+    expect(find.text('${kChangelog.first.version} · ${kChangelog.first.title}'), findsOneWidget);
+    expect(t.getRect(find.text('OK')).bottom, lessThanOrEqualTo(_screen.height));
+    expect(find.byType(Scrollbar), findsOneWidget); // the bar shows throughout
+    // Long: the oldest entry only in view once scrolled to.
+    final oldest = find.text('${kChangelog.last.version} · ${kChangelog.last.title}');
+    final dialog = t.getRect(find.byType(AlertDialog));
+    expect(t.getRect(oldest).top, greaterThan(dialog.bottom));
+    await t.drag(find.byType(SingleChildScrollView), const Offset(0, -4000));
+    await _frames(t);
+    expect(t.getRect(oldest).bottom, lessThan(dialog.bottom));
+    await t.tap(find.text('OK'));
+    await _frames(t);
+    expect(find.text("What's new"), findsNothing);
+  });
+
+  // The settings open the changelog any time.
+  testWidgets("what's new from the settings", (t) async {
+    SharedPreferences.setMockInitialValues({});
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: Panda(), bt: Commander())));
+    await t.tap(find.byIcon(Icons.wifi_off));
+    await _frames(t);
+    await t.ensureVisible(find.text("What's new"));
+    await t.tap(find.text("What's new"));
+    await _frames(t);
+    expect(find.text('${kChangelog.first.version} · ${kChangelog.first.title}'), findsOneWidget);
+    await t.tap(find.text('OK'));
+    await _frames(t);
+    await t.pump(const Duration(seconds: 1)); // the settings' fields' delayed disposal
+    await t.pumpWidget(const SizedBox());
+  });
 
   testWidgets('Commander link dialog', (t) async {
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: Panda(), bt: Commander())));

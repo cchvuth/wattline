@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tesla_dash/changelog.dart';
 import 'package:tesla_dash/update.dart';
 
 void main() {
@@ -62,6 +64,32 @@ void main() {
     }
     for (final why in ['HTTP 404', 'HTTP 403', 'no apk']) {
       expect(worthRetrying(why), isFalse, reason: why);
+    }
+  });
+
+  // What's new after an update: the releases since the one last run; to one
+  // who never saw the changelog, all of them.
+  test('the changes since the version last run', () {
+    expect(versionOf('1.0.9-95b10f3-1110-0016'), '1.0.9');
+    expect(versionOf(''), isNull);
+    List<String> since(String? last, String now) => [for (final c in changesSince(last, now)) c.version];
+    expect(since('1.0.6', '1.0.9'), ['1.0.9', '1.0.8', '1.0.7']);
+    expect(since(null, '1.0.9'), ['1.0.9', '1.0.8', '1.0.7', '1.0.6', '1.0.5', '1.0.4', '1.0.3']);
+    expect(since('1.0.9', '1.0.9'), isEmpty);
+  });
+
+  // Each release has its entry (the pubspec's version among them), newest
+  // first, and every screenshot it names is bundled.
+  test('the changelog covers the release being built', () {
+    final v = RegExp(r'^version: (\d+\.\d+\.\d+)', multiLine: true).firstMatch(File('pubspec.yaml').readAsStringSync())![1];
+    expect(kChangelog.map((c) => c.version), contains(v));
+    for (var i = 1; i < kChangelog.length; i++) {
+      expect(isNewer(kChangelog[i - 1].version, kChangelog[i].version), isTrue, reason: kChangelog[i].version);
+    }
+    for (final c in kChangelog) {
+      for (final s in c.shots) {
+        expect(File('assets/whatsnew/$s').existsSync(), isTrue, reason: s);
+      }
     }
   });
 }

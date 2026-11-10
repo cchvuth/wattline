@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'car_panel.dart';
+import 'changelog.dart';
 import 'commander.dart';
 import 'gauge.dart';
 import 'glyphs.dart';
@@ -233,6 +234,73 @@ class _DashPageState extends State<DashPage> {
     _bt.connect();
     _startTrace();
     _checkUpdate();
+    _whatsNew(prefs, firstRun);
+  }
+
+  /// After an update, what changed since the version last run, or the whole
+  /// changelog to one who never saw it; none on a first launch (Android, the
+  /// one platform that tells the app its version). The version is kept for
+  /// the next start.
+  Future<void> _whatsNew(SharedPreferences prefs, bool firstRun) async {
+    await loadBuild();
+    final current = versionOf(diagBuild);
+    if (current == null) return;
+    final last = prefs.getString('lastVersion');
+    if (last == current || (last != null && isNewer(last, current))) return; // the same, or rolled back
+    final news = firstRun ? const <Change>[] : changesSince(last, current);
+    if (news.isNotEmpty) {
+      await _calm(); // never over the dash on the move, nor over the approval prompt
+      if (!mounted) return;
+      // Closed (once) by the car as it leaves P, or by an approval prompt:
+      // unread, it comes again at the next start.
+      var cut = false;
+      void close() {
+        if (cut || !mounted) return;
+        // A gear actually out of P (a stale one, as in a stall, is not).
+        if ((_obd.live && const {'D', 'R', 'N'}.contains(_obd.gear)) || _approval != null) {
+          cut = true;
+          Navigator.of(context).pop();
+        }
+      }
+
+      // An update offer up now would sit unseen behind it: offered again on
+      // close. While it is open the offer waits (its listener stays on).
+      final covered = _offeredAt != null && DateTime.now().difference(_offeredAt!) < _offerFor;
+      _changelogOpen = true;
+      _obd.addListener(close);
+      _bt.addListener(close);
+      await showWhatsNew(context, news);
+      _obd.removeListener(close);
+      _bt.removeListener(close);
+      _changelogOpen = false;
+      if (covered) {
+        _obd.addListener(_offerUpdate); // now, or at the next stop if moving
+        _offerUpdate();
+      }
+      if (cut) return;
+    }
+    await prefs.setString('lastVersion', current); // seen (or nothing to see)
+  }
+
+  bool _changelogOpen = false;
+  DateTime? _offeredAt; // the update offer's snackbar, last shown
+  static const _offerFor = Duration(seconds: 12); // how long it stays up
+
+  /// Done once a stream (WiFi or Bluetooth) says P, with the dash in front
+  /// and no approval prompt up. Without a stream it waits: unseen, the
+  /// changelog comes again at the next start.
+  Future<void> _calm() {
+    final done = Completer<void>();
+    late final Timer poll;
+    poll = Timer.periodic(const Duration(seconds: 1), (_) {
+      // The dash in front: nothing pushed over it (no dependency on the route,
+      // which would redraw the dash each time a dialog comes or goes).
+      if (!mounted || (_obd.live && _obd.parked && _approval == null && !Navigator.of(context).canPop())) {
+        poll.cancel();
+        done.complete();
+      }
+    });
+    return done.future;
   }
 
   /// Why Bluetooth is not to start a link now, or null ([Commander.waitFor]).
@@ -382,10 +450,40 @@ class _DashPageState extends State<DashPage> {
   /// Which layout, on the first launch (the settings switch it later):
   /// everything at once, or basic's bigger cards.
   Future<void> _askLayout() async {
-    final basic = await _choose('Which layout?', const [
-      (false, 'Full', 'everything at once'),
-      (true, 'Basic', 'bigger text, one card a side; swipe a card for the next'),
-    ]);
+    // Each as it looks, to tap, as the car's question has its pictures.
+    final basic = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        scrollable: true,
+        title: const Text('Which layout?'),
+        // Halves of what room there is: a narrower screen shrinks them.
+        content: SizedBox(
+          width: 600,
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          for (final (basic, label, about, shot) in const [
+            (false, 'Full', 'everything at once', 'cold-morning'),
+            (true, 'Basic', 'bigger text on three cards, left, centre and right; swipe any for the next', 'basic-1'),
+          ])
+            Expanded(
+              child: InkWell(
+                onTap: () => Navigator.pop(ctx, basic),
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 6, children: [
+                    ClipRRect(
+                        borderRadius: BorderRadius.circular(8), child: Image.asset('assets/whatsnew/$shot.jpg')),
+                    Text(label, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                    Text(about, style: const TextStyle(color: Colors.white70)),
+                  ]),
+                ),
+              ),
+            ),
+          ]),
+        ),
+      ),
+    );
     if (basic != null && mounted) await _setBasic(basic);
   }
 
@@ -510,10 +608,11 @@ class _DashPageState extends State<DashPage> {
   /// no stream, else at the next stop in P. The settings keep the button.
   void _offerUpdate() {
     final u = _update;
-    if (u == null || !mounted || _installing || (_obd.live && !_obd.parked)) return;
+    if (u == null || !mounted || _installing || _changelogOpen || (_obd.live && !_obd.parked)) return;
     _obd.removeListener(_offerUpdate);
+    _offeredAt = DateTime.now();
     _say('Wattline ${u.version} is available',
-        duration: const Duration(seconds: 12), action: SnackBarAction(label: 'UPDATE', onPressed: _installUpdate));
+        duration: _offerFor, action: SnackBarAction(label: 'UPDATE', onPressed: _installUpdate));
   }
 
   /// Allowed to install apps first: going to Settings mid-install cancels
@@ -811,7 +910,7 @@ class _DashPageState extends State<DashPage> {
           ),
           Align(
             alignment: Alignment.centerLeft,
-            child: Row(children: [
+            child: Wrap(children: [ // onto a second line rather than off a narrow screen
               // A WiFi login changed there is the one to keep: the fields
               // here take it, or saving would put the old one back. Not
               // changed, what is typed here stays.
@@ -825,6 +924,8 @@ class _DashPageState extends State<DashPage> {
                     }
                   },
                   child: const Text('Setup steps')),
+              // Every release (the changelog is this build's).
+              TextButton(onPressed: () => showWhatsNew(context, kChangelog), child: const Text("What's new")),
               if (_update case final u?)
                 TextButton(
                   onPressed: () {

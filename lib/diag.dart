@@ -16,12 +16,17 @@ import 'signals.dart';
 /// changes, and build time. Set at startup ([loadBuild]); empty off Android.
 String diagBuild = '';
 
-Future<void> loadBuild() async {
+Future<void> loadBuild() => _build ??= _loadBuild(); // once: callers at start share it
+
+Future<void>? _build;
+
+Future<void> _loadBuild() async {
   try {
     diagBuild = await const MethodChannel('tesla_dash/net').invokeMethod<String>('buildInfo') ?? '';
-  } on MissingPluginException {
-    // no native side (tests, iOS): unknown
+  } catch (_) {
+    // no native side (tests, iOS), or it failed: unknown
   }
+  if (diagBuild.isEmpty) _build = null; // the next caller asks again
 }
 
 /// The Diagnostics report: what the dash decoded, the Commander, and every

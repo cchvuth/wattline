@@ -1047,8 +1047,9 @@ class _Controls extends StatelessWidget {
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
-          icon: const Icon(Icons.more_horiz, color: Colors.white),
-          tooltip: 'More actions',
+          // The car panel: locks, honk, flash, climate.
+          icon: const Icon(Icons.directions_car_outlined, color: Colors.white),
+          tooltip: 'Car controls',
           onPressed: () => Navigator.push(
             context,
             MaterialPageRoute(builder: (_) => CarPanel(bt: bt)),
@@ -1310,7 +1311,7 @@ class _Actions extends StatelessWidget {
             o.gear == 'R' ? o.mirrorDipped : o.tiltAuto,
             wifiOnly: true),
         // Lit while that door is open (latches from 0x102/0x103). Locks,
-        // honk and flash live in More actions.
+        // honk and flash live in the car controls.
         chip(S3xyAction.doorFrontLeft, Glyph.doorFL, 'Front left door', o.doorFL),
         chip(S3xyAction.doorRearLeft, Glyph.doorRL, 'Rear left door', o.doorRL),
         // Lit while the charge port door is open (CP_status).

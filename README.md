@@ -61,8 +61,8 @@ test/dash_shot_test.dart` redraws them. The drive is `test/drive_video_test.dart
 
 Buttons down both sides act on the car through the Commander, each door
 on its own side: trunk, mirror tilt and the charge port on the left,
-frunk, recirculation and interior lights on the right. More actions
-(locks, honk, flash, climate) are under ⋯.
+frunk, recirculation and interior lights on the right. The car controls
+(locks, honk, flash, climate) are under the car icon in the bottom bar.
 
 **Basic layout** (picked at the first launch, a switch in the settings, or a
 tap on the gear under the speed, which swaps back too):
@@ -211,8 +211,10 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 | `lib/signals.dart` | CAN signal table (id, bits, scale), from the public Tesla DBCs |
 | `lib/commander.dart` | Commander Bluetooth: protocomm Security1, EnhAPI actions and pushes |
 | `lib/gauge.dart` | the power ring and the dash's colours |
+| `lib/update.dart` | the in-app update from GitHub's releases (Android) |
+| `lib/changelog.dart` | what each release changed, shown after an update and in the settings: a release adds its entry |
 | `lib/glyphs.dart` | the car's icons, as vector paths |
-| `lib/car_panel.dart` | the ⋯ actions |
+| `lib/car_panel.dart` | the car controls (the bottom bar's car icon) |
 | `lib/diag.dart` | Diagnostics |
 
 [docs/signals-and-actions.md](docs/signals-and-actions.md) maps every value
