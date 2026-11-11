@@ -62,6 +62,7 @@ flutter:
   assets:
     - assets/car/
     - assets/car5/
+    - assets/car3/
     - assets/smt/
     - assets/bt/
     - assets/whatsnew/

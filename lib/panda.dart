@@ -128,8 +128,12 @@ class Panda extends ChangeNotifier {
   DateTime _steerAt = DateTime.fromMillisecondsSinceEpoch(0); // ID129's last frame
 
   /// Steering wheel turns per road wheel turn, and the wheelbase, m: the path
-  /// lines' bicycle model (the car picture's [steerRatio] note).
-  static const steerRatio = 13.7, wheelbase = 2.89;
+  /// lines' bicycle model. The Y's wheel turns about 450° each way to its
+  /// 32.8° lock, the 3's about 360° to its 34.1°.
+  /// ponytail: published figures; set them from a full-lock reading in the trace.
+  static const steerY = 13.7, steer3 = 10.6;
+  double get steerRatio => model3 ? steer3 : steerY;
+  double get wheelbase => model3 ? 2.875 : 2.89;
 
   /// The wheel turned past this shows the path lines.
   static const steerShowDeg = 3.0;
@@ -278,8 +282,11 @@ class Panda extends ChangeNotifier {
   /// its belts to chime from.
   bool thirdRow = true;
 
+  /// A Model 3 (the car picked), not a Y: its picture, and its steering.
+  bool model3 = false;
+
   bool get anyBeltUnbuckled =>
-      beltDriver || beltPass || belt2L || belt2C || belt2R || (thirdRow && (belt3L || belt3R));
+      beltDriver || beltPass || belt2L || belt2C || belt2R || (thirdRow && !model3 && (belt3L || belt3R));
 
   /// Every write stamps the gear's age. 0x118 comes every 10 ms, so a P
   /// older than 2 s means the link stalled, and [parked] then fails closed:

@@ -4,7 +4,8 @@ A landscape driver's display for a phone mounted behind the wheel of a
 Tesla Model Y, fed by an Enhauto **S3XY Commander** or any Panda-protocol
 OBD WiFi adapter ([without a Commander](#without-a-commander)). Built for the Model Y
 Juniper (2025 on), 5 or 7 seats, rear- or all-wheel drive; tested on a
-7-seater. Flutter; Android first, iOS works too.
+7-seater. The Model 3 (2024 on) can be picked too, with its own picture and
+lights; not yet tried in one. Flutter; Android first, iOS works too.
 
 ![The dash on a cold morning: signalling right, ice on the road, a cold pack capping regen, a third-row seat unbuckled](docs/screenshots/cold-morning.png)
 
@@ -36,8 +37,8 @@ It shows:
 - the route along the bottom: time to go and arrival time, the energy
   and range it uses, and battery and range at arrival (plus its length and
   the destination when the Commander has them);
-- the car from above (a Model Y with 5 or 7 seats, as picked at the first
-  launch): tyre pressures on the wheels, and on the seats each row's
+- the car from above (a Model Y with 5 or 7 seats or a Model 3, as picked
+  at the first launch): tyre pressures on the wheels, and on the seats each row's
   temperature, the front and second rows' fans (Auto's level
   when on Auto), buckled belts in green and a taken seat left unbuckled in
   red;
@@ -147,8 +148,8 @@ and the recirculation state. Only tested with the Commander so far.
    `S3XY_OBD` network (password `12345678`). Skip this step to run on
    Bluetooth only, and turn off **Bluetooth waits for the WiFi stream** in
    the settings (on by default, it holds Bluetooth until the stream runs).
-2. Open the dash. The first launch asks which car (Model Y, 5 or 7 seats,
-   and a 5-seater's drive), then shows these steps, step 1 with the S3XY
+2. Open the dash. The first launch asks which car (Model 3, or Model Y
+   with 5 or 7 seats, and a 5-seater's drive), then shows these steps, step 1 with the S3XY
    app's own screens, before the phone asks for its permissions.
    - Android joins `S3XY_OBD` itself (approve the system dialog once) and
      keeps mobile data for everything else.
@@ -243,7 +244,7 @@ command, with recipes for wiring one up.
   [niklaswa/S3XYCommander](https://github.com/niklaswa/S3XYCommander) (MIT).
 
 Unofficial: not affiliated with or endorsed by Tesla, Inc. or Enhauto.
-Tesla and Model Y are trademarks of Tesla, Inc.; S3XY Commander, S3XY
+Tesla, Model Y and Model 3 are trademarks of Tesla, Inc.; S3XY Commander, S3XY
 Buttons and S3XY Dash are Enhauto products.
 
 ## Licence

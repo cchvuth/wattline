@@ -330,7 +330,7 @@ class _DashPageState extends State<DashPage> {
     _traceFile = f;
     await loadBuild();
     if (!mounted) return;
-    _trace('start: build=$diagBuild sparse=$_sparse car=${_obd.thirdRow ? 7 : 5}${_obd.rwd ? 'rwd' : 'awd'} wifiFirst=$_wifiFirst look=${_lookMs}ms settle=${_settleMs}ms buttons=${_buttonsMs}ms '
+    _trace('start: build=$diagBuild sparse=$_sparse car=$_car wifiFirst=$_wifiFirst look=${_lookMs}ms settle=${_settleMs}ms buttons=${_buttonsMs}ms '
         'data=${_rejoinMs}ms back=${_backMs}ms');
     _traceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       _trace('${_obd.traceLine()} | bt ${_bt.link.name} "${_bt.status}" wait=${_btWaitsFor()} push=${_bt.pushInfo}');
@@ -382,15 +382,28 @@ class _DashPageState extends State<DashPage> {
         .then((p) => p.setStringList('tyres', [for (final v in t) v?.toString() ?? '']));
   }
   /// The cars offered: a 7-seat Model Y comes with two motors only; a
-  /// 5-seat one with one (RWD) or two.
-  static const _cars = {'modelY5rwd': '5 seats RWD', 'modelY5': '5 seats AWD', 'modelY7': '7 seats'};
+  /// 5-seat one, and the Model 3, with one (RWD) or two.
+  static const _cars = {
+    'model3rwd': 'Model 3 RWD',
+    'model3': 'Model 3 AWD',
+    'modelY5rwd': 'Model Y 5 seats RWD',
+    'modelY5': 'Model Y 5 seats AWD',
+    'modelY7': 'Model Y 7 seats',
+  };
 
-  /// The car as picked: a 5-seater's third row leaves the seat map, a
-  /// rear-motor car's front leaves the ring; and back.
+  /// The car as picked: its picture and steering, a 5-seater's third row
+  /// leaves the seat map, a rear-motor car's front leaves the ring; and back.
   void _applyCar(String car) => _obd
+    ..model3 = car.startsWith('model3')
     ..thirdRow = car == 'modelY7'
-    ..rwd = car == 'modelY5rwd';
-  String get _car => _obd.thirdRow ? 'modelY7' : _obd.rwd ? 'modelY5rwd' : 'modelY5';
+    ..rwd = car.endsWith('rwd');
+  String get _car => _obd.model3
+      ? (_obd.rwd ? 'model3rwd' : 'model3')
+      : _obd.thirdRow
+          ? 'modelY7'
+          : _obd.rwd
+              ? 'modelY5rwd'
+              : 'modelY5';
 
   /// Which car: a picture of each layout to tap, then for a 5-seater its
   /// drive. Asked on the first launch; the settings change it after. Back
@@ -398,37 +411,42 @@ class _DashPageState extends State<DashPage> {
   Future<void> _askCar() async {
     while (true) {
       if (!mounted) return;
-      final seven = await showDialog<bool>(
+      final car = await showDialog<String>(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           scrollable: true,
           title: const Text('Which car do you have?'),
-          content: Row(mainAxisSize: MainAxisSize.min, children: [
-            for (final s in [false, true])
+          // Shrinks in a narrow window (split screen), never overflows.
+          content: FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [
+            for (final (id, three, seven, label) in const [
+              ('model3', true, false, 'Model 3\n5 seats'),
+              ('modelY5', false, false, 'Model Y\n5 seats'),
+              ('modelY7', false, true, 'Model Y\n7 seats'),
+            ])
               InkWell(
-                onTap: () => Navigator.pop(ctx, s),
+                onTap: () => Navigator.pop(ctx, id),
                 borderRadius: BorderRadius.circular(12),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Column(children: [
-                    CarSeats(thirdRow: s, height: 150),
+                    CarSeats(model3: three, thirdRow: seven, height: 150),
                     const SizedBox(height: 8),
-                    Text('Model Y\n${s ? 7 : 5} seats', textAlign: TextAlign.center),
+                    Text(label, textAlign: TextAlign.center),
                   ]),
                 ),
               ),
-          ]),
+          ])),
         ),
       );
       if (!mounted) return;
-      if (seven == true) return _setCar('modelY7');
-      if (seven == false) {
+      if (car == 'modelY7') return _setCar(car!);
+      if (car != null) {
         final rwd = await _choose('Which drive?', const [
           (true, 'Rear-wheel drive', 'one motor'),
           (false, 'All-wheel drive', 'two motors'),
         ]);
-        if (rwd != null && mounted) return _setCar(rwd ? 'modelY5rwd' : 'modelY5');
+        if (rwd != null && mounted) return _setCar(rwd ? '${car}rwd' : car);
       }
     }
   }
@@ -1033,14 +1051,15 @@ class _DashPageState extends State<DashPage> {
               redraw, key: 'sparsePolling'),
           const SizedBox(height: 8),
           Row(children: [
-            const Expanded(child: Text('Car: Model Y')),
-            SegmentedButton<String>(
-              segments: [
-                for (final MapEntry(:key, :value) in _cars.entries) ButtonSegment(value: key, label: Text(value)),
+            const Expanded(child: Text('Car')),
+            DropdownButton<String>(
+              value: _car,
+              items: [
+                for (final MapEntry(:key, :value) in _cars.entries) DropdownMenuItem(value: key, child: Text(value)),
               ],
-              selected: {_car},
-              onSelectionChanged: (v) {
-                _setCar(v.first);
+              onChanged: (v) {
+                if (v == null) return;
+                _setCar(v);
                 redraw(() {});
               },
             ),

@@ -766,7 +766,7 @@ class _BasicCar extends StatelessWidget {
     // past the nose, the high one fades out by 0.38), the car, and its brake
     // glow under it. Reverse: its paths end on the card.
     const beams = 0.26, glow = 0.02;
-    final behind = 1 - _Car.pathFrom.$1 + _Car.pathBehind;
+    final behind = 1 - _Car.of(obd).pathFrom.$1 + _Car.pathBehind;
     final car = (h + above) / (beams + 1 + glow);
     final top = obd.gear == 'R' ? h - 2 - behind * car : beams * car - above;
     return Stack(clipBehavior: Clip.none, children: [
@@ -1689,72 +1689,154 @@ class _Lights extends StatelessWidget {
   }
 }
 
-/// The car pictures: one per layout, the same car at the same size and
-/// place, so one set of positions serves both: shares of the picture's width
-/// and length.
-abstract final class _Car {
-  static const aspect = 257 / 570;
-  static String dir(bool thirdRow) => thirdRow ? 'assets/car' : 'assets/car5';
-  static List<String> seats(bool thirdRow) => ['D', 'P', '2L', '2C', '2R', if (thirdRow) ...['3L', '3R']];
+/// A car's picture and where things are on it: shares of the picture's width
+/// and length. The Model Y's two (5 and 7 seats) are the same car at the same
+/// size and place, so they share one set.
+final class _Car {
+  const _Car({
+    required this.dir,
+    required this.aspect,
+    required this.rows,
+    required this.axles,
+    required this.tyreL,
+    required this.tyreR,
+    required this.tyreW,
+    required this.pillL,
+    required this.pillW,
+    required this.centre,
+    required this.nose,
+    required this.tail,
+    required this.pathFrom,
+    required this.steerRatio,
+    required this.maxRoadDeg,
+    required this.turns,
+    this.headlamp,
+    this.tailLamp,
+  }) : thirdRow = false;
 
-  /// Each seat row's centre along the length, front first.
-  static const rows = [0.494, 0.66, 0.804];
+  final String dir;
+  final double aspect;
+  final bool thirdRow;
+  List<String> get seats => ['D', 'P', '2L', '2C', '2R', if (thirdRow) ...['3L', '3R']];
+
+  /// Each seat row's centre along the length, front first (the last the
+  /// third row, or the boot).
+  final List<double> rows;
 
   /// The axles, front and rear.
-  static const axles = [0.205, 0.80];
+  final List<double> axles;
 
   /// The tyre figures: in from each side (the mirrors make the picture
   /// wider than the body, and not evenly), and as wide.
-  static const tyreL = 0.10, tyreR = 0.068, tyreW = 0.21;
+  final double tyreL, tyreR, tyreW;
 
   /// The rows' pills, centred on the seats.
-  static const pillL = 0.213, pillW = 0.62;
+  final double pillL, pillW;
 
   /// The body's centre line, across the width (the mirrors make the picture
   /// uneven, the body is not).
-  static const centre = 0.5155;
+  final double centre;
 
   /// The outline of the nose and of the tail, from the tip back, as (along,
-  /// half the body's width there), the same both sides: the light bars sit on
-  /// it. The nose's runs back to where the body is nearly its full width; the
-  /// tail's spans the hatch, corner to corner, not up the sides.
-  static const nose = [
-    (0.030, 0.0), (0.035, 0.154), (0.040, 0.214), (0.046, 0.244), (0.051, 0.263),
-    (0.061, 0.300), (0.072, 0.329), (0.082, 0.355), (0.093, 0.372), (0.104, 0.386),
-  ];
-  // The tail's: just outside its outline (the wider side of both pictures,
-  // so it hugs either evenly), flat across the bumper's middle.
-  static const tail = [
-    (0.9635, 0.0), (0.9635, 0.05), (0.9595, 0.105), (0.956, 0.138), (0.9525, 0.163), (0.949, 0.186),
-    (0.9455, 0.208), (0.9405, 0.222), (0.9368, 0.238), (0.9333, 0.249), (0.9298, 0.269), (0.9263, 0.280),
-  ];
+  /// half the body's width there), the same both sides: the Y's light bars
+  /// sit on them; the beams start at the nose's tip.
+  final List<(double, double)> nose, tail;
 
-  /// Where the path lines start: just outside the mirror tips (0.473 either
-  /// side of [centre], at 0.355 of the length): the car's widest points,
-  /// whose paths bound the space it sweeps.
-  static const pathFrom = (0.355, 0.495);
+  /// Where the path lines start: just outside the mirror tips, the car's
+  /// widest points, whose paths bound the space it sweeps.
+  final (double, double) pathFrom;
 
   /// How far the path lines run, of the car's length: ahead, and behind in R.
   static const pathAhead = 0.7, pathBehind = 0.53;
 
-  /// The steering: the Model Y's 12.1 m turning circle (kerb to kerb, so
-  /// 6.05 m to the outer front wheel), 2.89 m wheelbase and 1.66 m track put
-  /// the rear axle's centre 4.48 m from the turning point at full lock:
-  /// 32.8° for the one road wheel of the bicycle model. The wheel turns about
-  /// 450° each way, so a ratio near 13.7:1.
-  /// ponytail: published figures; set them from a full-lock reading in the trace.
-  static const steerRatio = Panda.steerRatio, maxRoadDeg = 32.8;
+  /// Steering wheel turns per road wheel turn ([Panda.steerRatio]), and the
+  /// road wheel's angle at full lock, from the turning circle (kerb to kerb),
+  /// the wheelbase and the track.
+  final double steerRatio, maxRoadDeg;
 
-  /// The turn signals, each side alike, on the body's edge (the narrower
-  /// side of both pictures): at the nose bar's end,
-  /// the side repeater on the front wing, at the tail bar's end.
-  static final turns = [
-    nose.sublist(6),
-    [(0.259, 0.404), (0.273, 0.401)], // by the wing's camera: a thin, short one
-    [(0.9263, 0.272), (0.9193, 0.299), (0.9088, 0.331)],
-  ];
+  /// The turn signals, each side alike: each its points as (along, out from
+  /// [centre]) and how thick (1 the bars', a repeater thinner).
+  final List<(List<(double, double)>, double)> turns;
+
+  /// Lamps apart at each corner, one side's, from the inner end out: the
+  /// 3's DRL strips and tail lamps. Null: bars across the nose and tail on
+  /// their outlines (the Y's).
+  final List<(double, double)>? headlamp, tailLamp;
+
+  static _Car pick({bool model3 = false, bool thirdRow = false}) => model3 ? three : thirdRow ? y7 : y5;
+  static _Car of(Panda o) => pick(model3: o.model3, thirdRow: o.thirdRow);
+
+  /// The Model Y: 12.1 m turning circle (6.05 m to the outer front wheel),
+  /// 2.89 m wheelbase and 1.66 m track put the rear axle's centre 4.48 m from
+  /// the turning point at full lock: 32.8° for the one road wheel of the
+  /// bicycle model. Both its pictures, one set of positions.
+  const _Car._y({required this.dir, this.thirdRow = false})
+      : aspect = 257 / 570,
+        rows = const [0.494, 0.66, 0.804],
+        axles = const [0.205, 0.80],
+        tyreL = 0.10,
+        tyreR = 0.068,
+        tyreW = 0.21,
+        pillL = 0.213,
+        pillW = 0.62,
+        centre = 0.5155,
+        // The nose's runs back to where the body is nearly its full width.
+        nose = const [
+          (0.030, 0.0), (0.035, 0.154), (0.040, 0.214), (0.046, 0.244), (0.051, 0.263),
+          (0.061, 0.300), (0.072, 0.329), (0.082, 0.355), (0.093, 0.372), (0.104, 0.386),
+        ],
+        // Just outside its outline (the wider side of both pictures, so it
+        // hugs either evenly), flat across the bumper's middle; corner to
+        // corner across the hatch, not up the sides.
+        tail = const [
+          (0.9635, 0.0), (0.9635, 0.05), (0.9595, 0.105), (0.956, 0.138), (0.9525, 0.163), (0.949, 0.186),
+          (0.9455, 0.208), (0.9405, 0.222), (0.9368, 0.238), (0.9333, 0.249), (0.9298, 0.269), (0.9263, 0.280),
+        ],
+        pathFrom = const (0.355, 0.495),
+        steerRatio = Panda.steerY,
+        maxRoadDeg = 32.8,
+        // The nose bar's end, by the wing's camera (thin, short), the tail
+        // bar's end; on the body's edge (the narrower side of both pictures).
+        turns = const [
+          ([(0.072, 0.329), (0.082, 0.355), (0.093, 0.372), (0.104, 0.386)], 1),
+          ([(0.259, 0.404), (0.273, 0.401)], 0.83),
+          ([(0.9263, 0.272), (0.9193, 0.299), (0.9088, 0.331)], 1),
+        ],
+        headlamp = null,
+        tailLamp = null;
+
+  static const y5 = _Car._y(dir: 'assets/car5');
+  static const y7 = _Car._y(dir: 'assets/car', thirdRow: true);
+
+  static const _tail3 = [(0.9343, 0.2424), (0.9297, 0.2688), (0.9246, 0.2972), (0.9197, 0.3218), (0.9148, 0.3435), (0.9090, 0.3640), (0.9025, 0.3740)];
+
+  /// The Model 3: 11.6 m turning circle, 2.875 m wheelbase and 1.58 m track:
+  /// 34.1° at full lock. Its lamps measured off the picture's own: the DRL
+  /// strip round each headlamp, the tail lamp round each rear corner. Its
+  /// indicator: a strip of its own just under the DRL's inner half, the
+  /// repeater by the wing's camera, and the whole tail lamp.
+  static const three = _Car(
+    dir: 'assets/car3',
+    aspect: 314 / 680,
+    rows: [0.4756, 0.667, 0.829],
+    axles: [0.205, 0.765],
+    tyreL: 0.057, tyreR: 0.060, tyreW: 0.22,
+    pillL: 0.176, pillW: 0.656,
+    centre: 0.4962,
+    nose: [(0.0279, 0.0)],
+    tail: [(0.9645, 0.0)],
+    pathFrom: (0.369, 0.50),
+    steerRatio: Panda.steer3,
+    maxRoadDeg: 34.1,
+    headlamp: [(0.0692, 0.2647), (0.0806, 0.3103), (0.0889, 0.3441), (0.0970, 0.3651), (0.1060, 0.3819), (0.1163, 0.3923), (0.1267, 0.3982)],
+    tailLamp: _tail3,
+    turns: [
+      ([(0.0652, 0.2650), (0.0762, 0.3100), (0.0847, 0.3435), (0.0928, 0.3640)], 1),
+      ([(0.2542, 0.428), (0.2772, 0.428)], 0.83), // by the wing's camera: thin, short
+      (_tail3, 1),
+    ],
+  );
 }
-
 
 /// The car's lights on its picture: with the DRL thin bars on the nose
 /// (white) and the tail (red) outlines; low beams a cone ahead, high beams a
@@ -1764,6 +1846,7 @@ abstract final class _Car {
 /// it), then the lamps themselves over it.
 class _CarLights extends CustomPainter {
   _CarLights({
+    required this.car,
     required this.drl,
     required this.low,
     required this.high,
@@ -1786,7 +1869,11 @@ class _CarLights extends CustomPainter {
   /// Whether to draw them ([Panda.steerLines]): past the mark, or just back.
   final bool steerLines;
 
+  final _Car car;
   final bool drl, low, high, brake;
+
+  /// The cool white of an LED strip's bloom.
+  static const _led = Color(0xFFDCEBFF);
 
   /// An indicator lit, in step with the car's flasher.
   final bool left, right;
@@ -1797,13 +1884,16 @@ class _CarLights extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width, h = size.height;
+    final w = size.width, h = size.height, car = this.car;
     // The bar: down one side of the outline, across the tip, back up the
     // other, moved [inward] along the length.
     List<Offset> bar(List<(double, double)> edge, double inward) => [
-          for (final (y, half) in edge.reversed) Offset(w * (_Car.centre - half), h * (y + inward)),
-          for (final (y, half) in edge.skip(1)) Offset(w * (_Car.centre + half), h * (y + inward)),
+          for (final (y, half) in edge.reversed) Offset(w * (car.centre - half), h * (y + inward)),
+          for (final (y, half) in edge.skip(1)) Offset(w * (car.centre + half), h * (y + inward)),
         ];
+    // One side's points ([s] -1 left, 1 right).
+    List<Offset> oneSide(List<(double, double)> pts, int s) =>
+        [for (final (y, half) in pts) Offset(w * (car.centre + s * half), h * y)];
     // A smooth curve through measured points (Catmull-Rom): a polyline
     // through pixel-rounded samples wriggles.
     Path smooth(List<Offset> p) {
@@ -1827,8 +1917,8 @@ class _CarLights extends CustomPainter {
     // out, its far edge an arc (no flat top), the light fading with distance
     // on arcs alike ([reach]: a share of the length past the nose). Not
     // clipped to the outline: a clip's straight edge showed.
-    void cone(List<Offset> front, double reach, double alpha) {
-      final l = front.first, r = front.last, cx = w * _Car.centre, nose = h * _Car.nose.first.$1;
+    void cone(Offset l, Offset r, double reach, double alpha) {
+      final cx = w * car.centre, nose = h * car.nose.first.$1;
       final len = h * reach, spread = len * 0.7; // about 35° each side
       // The fade's centre well behind the nose: its rings, and the far edge
       // on one of them, are gentle arcs.
@@ -1857,24 +1947,38 @@ class _CarLights extends CustomPainter {
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
     }
 
-    final front = bar(_Car.nose, 0.002), rear = bar(_Car.tail, 0);
-    // The tail's a parabola from end to end (its outline is one, near
-    // enough): the smoothest there is.
-    final tip = h * _Car.tail.first.$1;
-    final frontPath = smooth(front),
-        rearPath = Path()
+    // The lamps: the Y's bars across the nose and tail, or a lamp at each
+    // corner; the beams from the outer ends of the front ones.
+    final List<Path> fronts, rears;
+    final Offset beamL, beamR;
+    if ((car.headlamp, car.tailLamp) case (final head?, final tail?)) {
+      fronts = [for (final s in [-1, 1]) smooth(oneSide(head, s))];
+      rears = [for (final s in [-1, 1]) smooth(oneSide(tail, s))];
+      beamL = oneSide(head, -1).last;
+      beamR = oneSide(head, 1).last;
+    } else {
+      final front = bar(car.nose, 0.002), rear = bar(car.tail, 0);
+      // The tail's a parabola from end to end (its outline is one, near
+      // enough): the smoothest there is.
+      final tip = h * car.tail.first.$1;
+      fronts = [smooth(front)];
+      rears = [
+        Path()
           ..moveTo(rear.first.dx, rear.first.dy)
-          ..quadraticBezierTo(w * _Car.centre, 2 * tip - rear.first.dy, rear.last.dx, rear.last.dy);
+          ..quadraticBezierTo(w * car.centre, 2 * tip - rear.first.dy, rear.last.dx, rear.last.dy),
+      ];
+      beamL = front.first;
+      beamR = front.last;
+    }
     final front_ = drl || low || high, rear_ = front_ || brake;
+    // A corner tail lamp's red steps back while its indicator is lit (the
+    // rears left, then right), so the amber in the same lamp shows.
+    double dim(int i) => car.headlamp != null && (i == 0 ? left : right) ? 0.35 : 1;
     // Each lit indicator: its path, and how thick (the wing's is thin).
     final turns = [
-      for (final (on, side) in [(left, -1), (right, 1)])
+      for (final (on, s) in [(left, -1), (right, 1)])
         if (on)
-          for (final (i, seg) in _Car.turns.indexed)
-            (
-              smooth([for (final (y, half) in seg) Offset(w * (_Car.centre + side * half), h * y)]),
-              i == 1 ? 0.5 : 0.6,
-            ),
+          for (final (seg, k) in car.turns) (smooth(oneSide(seg, s)), 0.6 * k),
     ];
     if (beams) {
       // The space the car sweeps, as it really goes: with the wheel held,
@@ -1883,12 +1987,12 @@ class _CarLights extends CustomPainter {
       // arc about that point, true to scale. Where an arc passes under the
       // car the body hides it (these are painted beneath it). Dots, fading
       // with distance; none while fairly straight ([steerLines]).
-      final road = ((steerDeg ?? 0) / _Car.steerRatio).clamp(-_Car.maxRoadDeg, _Car.maxRoadDeg) * pi / 180;
+      final road = ((steerDeg ?? 0) / car.steerRatio).clamp(-car.maxRoadDeg, car.maxRoadDeg) * pi / 180;
       if (steerLines) {
-        final wheelbase = h * (_Car.axles[1] - _Car.axles[0]); // 2.89 m
+        final wheelbase = h * (car.axles[1] - car.axles[0]);
         // Wheels dead straight (held after a turn): a turn too wide to see.
         final r = wheelbase / tan(max(road.abs(), 1e-4)), side = road > 0 ? -1 : 1; // left: centre to the left
-        final cx = w * _Car.centre, c = Offset(cx + side * r, h * _Car.axles[1]);
+        final cx = w * car.centre, c = Offset(cx + side * r, h * car.axles[1]);
         final step = h * 0.022;
         // Each line the true path of a point just outside the body, one arc
         // about that point, from the mirror tips on (at full lock the outer
@@ -1897,7 +2001,7 @@ class _CarLights extends CustomPainter {
         // bottom bar.
         final len = h * (reverse ? _Car.pathBehind : _Car.pathAhead);
         for (final s in [-1, 1]) {
-          final p = Offset(cx + s * w * _Car.pathFrom.$2, h * _Car.pathFrom.$1);
+          final p = Offset(cx + s * w * car.pathFrom.$2, h * car.pathFrom.$1);
           final rad = (p - c).distance, a0 = atan2(p.dy - c.dy, p.dx - c.dx);
           // The same two ends as the true arc, the line between them pushed further
           // out than the true arc (a quadratic through its middle, bulge x3).
@@ -1918,12 +2022,16 @@ class _CarLights extends CustomPainter {
       // Under the car: the beams and the bars' glow. The body hides the half
       // that would light it, and the glow fades round the bars' ends.
       if (high) {
-        cone(front, 0.38, 0.56); // further, brighter
+        cone(beamL, beamR, 0.38, 0.56); // further, brighter
       } else if (low) {
-        cone(front, 0.234, 0.35);
+        cone(beamL, beamR, 0.234, 0.35);
       }
-      if (front_) canvas.drawPath(frontPath, line(Colors.white.withValues(alpha: 0.6), 3, 1.5));
-      if (rear_) canvas.drawPath(rearPath, line(kAlert.withValues(alpha: brake ? 0.95 : 0.5), brake ? 6 : 3, brake ? 2.5 : 1.5));
+      for (final p in front_ ? fronts : const <Path>[]) {
+        canvas.drawPath(p, line(Colors.white.withValues(alpha: 0.6), 3, 1.5));
+      }
+      for (final (i, p) in (rear_ ? rears : const <Path>[]).indexed) {
+        canvas.drawPath(p, line(kAlert.withValues(alpha: (brake ? 0.95 : 0.5) * dim(i)), brake ? 6 : 3, brake ? 2.5 : 1.5));
+      }
       for (final (t, k) in turns) {
         // A wide soft halo and a brighter core round the thin lamp.
         canvas.drawPath(t, line(kWarn.withValues(alpha: 0.5), 20 * k, 10 * k));
@@ -1931,16 +2039,43 @@ class _CarLights extends CustomPainter {
       }
       return;
     }
-    // Over it, the bars themselves.
-    if (front_) canvas.drawPath(frontPath, line(Colors.white, 0.75));
-    if (rear_) canvas.drawPath(rearPath, line(brake ? const Color(0xFFFF6B6B) : kAlert, brake ? 1 : 0.75));
+    // Over it, the bars themselves. The beams on, a lamp's whole unit lit
+    // a little round its strip (the 3's; the Y's sit under its bar).
+    // A corner lamp (the 3's) glows from the lamp itself, over the body
+    // round it as well as past it: a wide soft halo, and a bloom on the strip.
+    if (car.headlamp != null) {
+      for (final p in front_ ? fronts : const <Path>[]) {
+        // The beams on: a wider, brighter halo, more again on high.
+        final (alpha, wide) = high ? (0.42, 0.2) : low ? (0.32, 0.16) : (0.2, 0.12);
+        canvas.drawPath(p, line(_led.withValues(alpha: alpha), w * wide, w * wide * 0.42));
+        if (low || high) canvas.drawPath(p, line(_led.withValues(alpha: high ? 0.55 : 0.42), w * 0.07, w * 0.03));
+        canvas.drawPath(p, line(_led.withValues(alpha: 0.55), 2.6, 1.3));
+      }
+      for (final (i, p) in (rear_ ? rears : const <Path>[]).indexed) {
+        final k = dim(i);
+        canvas.drawPath(p, line(kAlert.withValues(alpha: (brake ? 0.36 : 0.2) * k), w * 0.12, w * 0.05));
+        canvas.drawPath(p, line(kAlert.withValues(alpha: (brake ? 0.7 : 0.45) * k), 2.6, 1.3));
+      }
+    }
+    for (final p in front_ ? fronts : const <Path>[]) {
+      canvas.drawPath(p, line(Colors.white, 0.75));
+    }
+    for (final p in rear_ ? rears : const <Path>[]) {
+      canvas.drawPath(p, line(brake ? const Color(0xFFFF6B6B) : kAlert, brake ? 1 : 0.75));
+    }
     for (final (t, k) in turns) {
+      // Over a corner lamp's halo, the indicator's own: amber wins while lit.
+      if (car.headlamp != null) {
+        canvas.drawPath(t, line(kWarn.withValues(alpha: 0.5), w * 0.09, w * 0.038));
+        canvas.drawPath(t, line(kWarn, 5 * k, 2 * k));
+      }
       canvas.drawPath(t, line(const Color(0xFFFFD27A), 1.5 * k));
     }
   }
 
   @override
   bool shouldRepaint(_CarLights old) =>
+      old.car != car ||
       old.drl != drl ||
       old.low != low ||
       old.high != high ||
@@ -1956,17 +2091,20 @@ class _CarLights extends CustomPainter {
 /// The car as it is, dark seats and all: what the car picker shows for each
 /// layout.
 class CarSeats extends StatelessWidget {
-  const CarSeats({super.key, required this.thirdRow, required this.height});
+  const CarSeats({super.key, this.model3 = false, this.thirdRow = false, required this.height});
 
-  final bool thirdRow;
+  final bool model3, thirdRow;
   final double height;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        height: height,
-        width: height * _Car.aspect,
-        child: Image.asset('${_Car.dir(thirdRow)}/car.png', fit: BoxFit.fill),
-      );
+  Widget build(BuildContext context) {
+    final car = _Car.pick(model3: model3, thirdRow: thirdRow);
+    return SizedBox(
+      height: height,
+      width: height * car.aspect,
+      child: Image.asset('${car.dir}/car.png', fit: BoxFit.fill),
+    );
+  }
 }
 
 /// The car from above, front up, its seats 2 + 3 + 2 or 2 + 3 as picked (the
@@ -2005,22 +2143,22 @@ class _Cabin extends StatelessWidget {
       'D': o.beltDriver, 'P': o.beltPass, '2L': o.belt2L, '2C': o.belt2C,
       '2R': o.belt2R, '3L': o.belt3L, '3R': o.belt3R,
     };
-    final dir = _Car.dir(o.thirdRow);
+    final car = _Car.of(o), dir = car.dir;
     final fill = carHeight != null;
     // Room above it for the beams over the lamps' row, behind it for the
     // brake glow, and round it for the unbuckled seat's frame.
     final padTop = scale(fill ? _fillTop : 4), padBottom = scale(fill ? 4 : 6), frame = fill ? _fillFrame : 4.0;
     final carH = carHeight ?? scale(236);
-    final carW = carH * _Car.aspect; // the image's own shape
+    final carW = carH * car.aspect; // the image's own shape
     // A tyre's psi on the body over its wheel: between the outline and the
     // seats, as far in from each side (the mirrors make the image wider than
     // the body, the left more than the right).
     // Bigger figures widen the box about its centre and shrink to it.
-    final f = fill ? _fillFigures : 1.0, tyreOut = carW * _Car.tyreW * (f - 1) / 2;
+    final f = fill ? _fillFigures : 1.0, tyreOut = carW * car.tyreW * (f - 1) / 2;
     Widget tyre(double? bar, double at, bool left) => Positioned(
-          left: left ? carW * _Car.tyreL - tyreOut : null,
-          right: left ? null : carW * _Car.tyreR - tyreOut,
-          width: carW * _Car.tyreW * f,
+          left: left ? carW * car.tyreL - tyreOut : null,
+          right: left ? null : carW * car.tyreR - tyreOut,
+          width: carW * car.tyreW * f,
           top: carH * at - scale(15) * f,
           height: scale(30) * f,
           child: FittedBox(
@@ -2044,8 +2182,8 @@ class _Cabin extends StatelessWidget {
     // its "psi", so the two read alike.
     final temp = (fill ? 14 : 16) * f, word = (fill ? 9 : 11) * f;
     Widget row(double at, double c, [String? fan]) => Positioned(
-          left: carW * _Car.pillL,
-          width: carW * _Car.pillW,
+          left: carW * car.pillL,
+          width: carW * car.pillW,
           top: carH * at - scale(fan == null ? 11 : 19) * f,
           height: scale(fan == null ? 22 : 38) * f,
           // Shrinks, never overflows, should a long fan word meet big figures.
@@ -2072,6 +2210,7 @@ class _Cabin extends StatelessWidget {
     // The beams and paths under the car, the rest over it.
     Widget lights({bool beams = false}) => CustomPaint(
         painter: _CarLights(
+            car: car,
             drl: o.drl == true,
             low: o.lowBeam == true,
             high: o.highBeam == true,
@@ -2083,7 +2222,7 @@ class _Cabin extends StatelessWidget {
             steerLines: beams && o.steerLines,
             reverse: beams && o.gear == 'R',
             beams: beams));
-    final car = SizedBox(
+    final picture = SizedBox(
       width: carW,
       height: carH,
       child: Stack(fit: StackFit.expand, clipBehavior: Clip.none, children: [
@@ -2093,23 +2232,23 @@ class _Cabin extends StatelessWidget {
         if (o.live) lights(beams: true),
         Image.asset('$dir/car.png', fit: BoxFit.fill),
         if (live)
-          for (final s in _Car.seats(o.thirdRow))
+          for (final s in car.seats)
             if (unbuckled[s]! || o.buckled.contains(s))
               Image.asset('$dir/seat_$s.png',
                   fit: BoxFit.fill, colorBlendMode: BlendMode.modulate, color: unbuckled[s]! ? kAlert : kRegen),
         // Its lights, past its ends into the room the padding leaves.
         if (o.live) lights(),
-        tyre(o.tpFL, _Car.axles[0], true),
-        tyre(o.tpFR, _Car.axles[0], false),
-        tyre(o.tpRL, _Car.axles[1], true),
-        tyre(o.tpRR, _Car.axles[1], false),
+        tyre(o.tpFL, car.axles[0], true),
+        tyre(o.tpFR, car.axles[0], false),
+        tyre(o.tpRL, car.axles[1], true),
+        tyre(o.tpRR, car.axles[1], false),
         // A row with a seat unbuckled leaves the red in full view.
         if (live) ...[
           // A row the car gives no air reading for shows none.
-          if (o.cabinC1 != null && !o.beltDriver && !o.beltPass) row(_Car.rows[0], o.cabinC1!, o.fan1),
-          if (o.cabinC2 != null && !o.belt2L && !o.belt2C && !o.belt2R) row(_Car.rows[1], o.cabinC2!, o.fan2),
+          if (o.cabinC1 != null && !o.beltDriver && !o.beltPass) row(car.rows[0], o.cabinC1!, o.fan1),
+          if (o.cabinC2 != null && !o.belt2L && !o.belt2C && !o.belt2R) row(car.rows[1], o.cabinC2!, o.fan2),
           // A 5-seater's in the boot, should the car send one; no belts there.
-          if (o.cabinC3 != null && (!o.thirdRow || (!o.belt3L && !o.belt3R))) row(_Car.rows[2], o.cabinC3!),
+          if (o.cabinC3 != null && (!car.thirdRow || (!o.belt3L && !o.belt3R))) row(car.rows[2], o.cabinC3!),
         ],
       ]),
     );
@@ -2130,7 +2269,7 @@ class _Cabin extends StatelessWidget {
                   border: Border.all(color: kAlert),
                 )
               : null,
-          child: car,
+          child: picture,
         ),
       ),
     );

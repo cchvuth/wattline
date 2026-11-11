@@ -129,6 +129,30 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
+  // The settings pick the car: a Model 3 gets its picture and steering,
+  // RWD its ring; and back to the Y.
+  testWidgets('car from the settings', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    final o = Panda();
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
+    await t.tap(find.byIcon(Icons.wifi_off));
+    await _frames(t);
+    Future<void> pick(String label) async {
+      await t.ensureVisible(find.byType(DropdownButton<String>));
+      await t.tap(find.byType(DropdownButton<String>));
+      await _frames(t);
+      await t.tap(find.text(label).last);
+      await _frames(t);
+    }
+    await pick('Model 3 RWD');
+    expect((o.model3, o.rwd, o.thirdRow, o.steerRatio), (true, true, false, Panda.steer3));
+    await pick('Model Y 7 seats');
+    expect((o.model3, o.rwd, o.thirdRow, o.steerRatio), (false, false, true, Panda.steerY));
+    expect((await SharedPreferences.getInstance()).getString('car'), 'modelY7');
+    await t.pump(const Duration(seconds: 1)); // the settings' fields' delayed disposal
+    await t.pumpWidget(const SizedBox());
+  });
+
   testWidgets('Commander link dialog', (t) async {
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: Panda(), bt: Commander())));
     await t.tap(find.byIcon(Icons.wifi_off));

@@ -207,6 +207,30 @@ final _shots = <String, (Size, Panda Function())>{
     ..fan1 = '2'
     ..fan2 = 'OFF'
     ..buckled.addAll({'D', 'P', '2R'}))),
+  // A Model 3 braking at dusk, indicating left: its own corner lamps.
+  'model-3': (const Size(823.5, 384), () => _seen(_car()
+    ..model3 = true
+    ..thirdRow = false
+    ..drl = true
+    ..lowBeam = true
+    ..braking = true
+    ..indL = true
+    ..blinkLit = true
+    ..speed = 23
+    ..gear = 'D'
+    ..frontKw = -8
+    ..rearKw = -14
+    ..brakePct = 40
+    ..socPct = 64
+    ..rangeMi = 198
+    ..speedLimit = 50
+    ..outsideC = 9
+    ..cabinC1 = 21
+    ..cabinC2 = 21
+    ..fan1 = '3'
+    ..fan2 = 'OFF'
+    ..buckled.addAll({'D', 'P'})
+    ..belt2L = true)),
   // A Supercharger in the cold: the pack still warming holds it back.
   'charging': (const Size(823.5, 384), () => _seen(_car()
     ..speed = 0
