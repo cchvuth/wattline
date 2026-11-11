@@ -1,19 +1,18 @@
-# On every push to master: analyze and the tests, and both APKs built side by
-# side, then a pre-release with the APKs once all three pass. A version tag
-# (v1.0.0) does the same as a full release under its own name.
+# A version tag (v1.0.0): analyze and the tests, both APKs built side by
+# side, then the release under its name once all three pass. Run by hand
+# (Actions, Run workflow): the same checks and APKs, kept as the run's
+# artifacts, no release.
 name: APK
 
 on:
   push:
-    branches: [master]
     tags: ['v*']
   workflow_dispatch:
 
 permissions:
   contents: write # the release
 
-# A newer push to master replaces a run still going; a version tag's run
-# always finishes.
+# A version tag's run always finishes; a run by hand gives way to a newer one.
 concurrency:
   group: apk-${{ github.ref }}
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
@@ -68,9 +67,10 @@ jobs:
           channel: stable
           cache: true
       # Gradle and what it fetches (the Android plugin, the Kotlin compiler,
-      # Flutter's engine) from the Actions cache, which master's runs save and
-      # tag runs read: downloaded from GitHub on every run, GitHub's 504s sank
-      # the 1.0.6 build. The open-source (MIT) provider, not the default one.
+      # Flutter's engine) from the Actions cache: downloaded from GitHub on
+      # every run, GitHub's 504s sank the 1.0.6 build. Only a run on master
+      # (by hand) saves it; tag runs read it, and it lapses after 7 days
+      # unused. The open-source (MIT) provider, not the default one.
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-provider: basic
@@ -86,21 +86,18 @@ jobs:
 
   release:
     needs: [test, build]
+    if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
-      - name: Short commit
-        run: echo "SHORT=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
-      # A pre-release per push, a release per version tag: open it on the
-      # phone and tap the APK.
+      # The release, the APKs on it: open it on the phone and tap one.
       - uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
-          name: ${{ github.ref_type == 'tag' && format('Wattline {0}', github.ref_name) || format('Build {0} ({1})', github.run_number, env.SHORT) }}
+          tag_name: ${{ github.ref_name }}
+          name: Wattline ${{ github.ref_name }}
           target_commitish: ${{ github.sha }}
-          prerelease: ${{ github.ref_type != 'tag' }}
-          make_latest: ${{ github.ref_type == 'tag' }}
+          make_latest: true
           generate_release_notes: true
           files: Wattline-Android*.apk
