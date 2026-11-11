@@ -10,6 +10,16 @@ typedef Change = ({String version, String title, List<String> notes, List<String
 
 const kChangelog = <Change>[
   (
+    version: '1.2.1',
+    title: 'Model 3 fix',
+    notes: [
+      "Model 3: the battery's figures (pack energy, the buffer, the capacity when new) no longer pick up an "
+          'unrelated frame its chassis bus sends on the same id',
+      'A car saved by a newer version is asked again rather than guessed',
+    ],
+    shots: [],
+  ),
+  (
     version: '1.2.0',
     title: 'Model 3',
     notes: [
