@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:tesla_dash/car.dart';
 import 'package:tesla_dash/diag.dart';
 import 'package:tesla_dash/main.dart' show kBasicBase, kBasicCards, basicSkip;
 import 'package:tesla_dash/panda.dart';
@@ -296,6 +297,29 @@ void main() {
     // pack's energy now less the car's at arrival.
     expect(p.tripKwh(p.arrivePct), closeTo(50.62 - 49.44, 0.001));
     expect(p.tripKwh(null), isNull);
+
+    // A Model 3's chassis bus reuses the id for TRCM_info: any index past
+    // the battery's pages, whatever its low 2 bits (20 and 4 read as page 0,
+    // 13 and 9 as page 1), leaves the pack alone.
+    for (final index in [20, 4, 13, 9]) {
+      p.onFrame(0x352, 1, [index, 0x00, 0xA0, 0x0F, 0x00, 0x10, 0x00, 0x00]);
+    }
+    expect(p.packKwh, closeTo(81.76, 0.001));
+    expect(p.packLeftKwh, closeTo(50.62, 0.001));
+    expect(p.packBufferKwh, closeTo(3.68, 0.001));
+    // Still in Diagnostics: the second bus on the id shows.
+    expect(p.frames[0x352]!.lastBus, 1);
+  });
+
+  // Its frame first on the chassis bus, the 3's pack capacity still comes
+  // from the battery's bus.
+  test('pack capacity on a Model 3 with TRCM_info on 0x352', () {
+    final p = Panda();
+    p.onFrame(0x352, 1, [0x14, 0x00, 0xA0, 0x0F, 0x00, 0x10, 0x00, 0x00]); // TRCM_info, chassis
+    p.onFrame(0x352, 0, [0x00, 0x80, 0xF8, 0x0F, 0xE3, 0x09, 0xD1, 0x09]); // battery
+    p.onFrame(0x392, 0, [0x01, 0x00, 0x00, 0x00, 0x00, 0x14, 0x03, 0x00]); // new: 78.8 kWh
+    expect(p.frames[0x352]!.bus, 1); // the id first heard on the chassis bus
+    expect(p.packNewKwh, closeTo(78.8, 0.001));
   });
 
   test('Bluetooth stands in for WiFi, WiFi first', () async {
@@ -681,7 +705,7 @@ void main() {
 
   test('a rear-motor car: the rear follows the pack alone', () {
     final p = Panda()
-      ..rwd = true // as picked
+      ..car = Car.modelY5Rwd // as picked
       ..onFrame(0x118, 1, [0, 0, 0x80, 0, 0, 0, 0, 0]) // D
       ..speed = 30
       ..onFrame(0x132, 1, pack(400, -20)) // 8 kW from the pack
@@ -1084,13 +1108,13 @@ void main() {
   // only motor arc keeps the whole of the power.
   test('a rear-motor car takes no front motor frame', () {
     final p = Panda()
-      ..rwd = true
+      ..car = Car.modelY5Rwd
       ..onFrame(0x2E5, 1, [0, 0, 0, 0, 0xD0, 0x48, 0]); // 18 kW, were it read
     expect(p.frontKw, isNull);
     // Picked as rear-motor mid-drive: the last front reading goes too.
     final q = Panda()..onFrame(0x2E5, 1, [0, 0, 0, 0, 0xD0, 0x48, 0]);
     expect(q.frontKw, 18);
-    q.rwd = true;
+    q.car = Car.modelY5Rwd;
     expect(q.frontKw, isNull);
   });
 }

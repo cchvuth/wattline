@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'car.dart';
 import 'car_panel.dart';
 import 'changelog.dart';
 import 'commander.dart';
@@ -174,7 +175,10 @@ class _DashPageState extends State<DashPage> {
     _ringPage = (prefs.getInt('ringPage') ?? _ringPage).clamp(0, 1); // the power ring or the speedometer
     _sparse = prefs.getBool('sparsePolling') ?? _sparse;
     _obd.sparse = _sparse;
-    _applyCar(prefs.getString('car') ?? 'modelY7'); // the owner's, by default
+    // None saved (the first launch), or one this build does not know: asked
+    // below.
+    final saved = Car.tryId(prefs.getString('car'));
+    _obd.car = saved ?? Car.fallback;
     // Inside the slider's range, whatever was stored.
     _lookMs = (prefs.getInt('wifiLookMs') ?? _lookMs).clamp(1000, 10000).toInt();
     _applyLook();
@@ -230,6 +234,9 @@ class _DashPageState extends State<DashPage> {
       await _setupHelp();
       if (!mounted) return;
       prefs.setBool('setupDone', true);
+    } else if (saved == null && mounted) {
+      await _askCar(); // set up before, the car saved by a build that knew another
+      if (!mounted) return;
     }
     _connect();
     _linksStarted = true;
@@ -330,7 +337,7 @@ class _DashPageState extends State<DashPage> {
     _traceFile = f;
     await loadBuild();
     if (!mounted) return;
-    _trace('start: build=$diagBuild sparse=$_sparse car=$_car wifiFirst=$_wifiFirst look=${_lookMs}ms settle=${_settleMs}ms buttons=${_buttonsMs}ms '
+    _trace('start: build=$diagBuild sparse=$_sparse car=${_obd.car.id} wifiFirst=$_wifiFirst look=${_lookMs}ms settle=${_settleMs}ms buttons=${_buttonsMs}ms '
         'data=${_rejoinMs}ms back=${_backMs}ms');
     _traceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       _trace('${_obd.traceLine()} | bt ${_bt.link.name} "${_bt.status}" wait=${_btWaitsFor()} push=${_bt.pushInfo}');
@@ -381,37 +388,14 @@ class _DashPageState extends State<DashPage> {
     SharedPreferences.getInstance()
         .then((p) => p.setStringList('tyres', [for (final v in t) v?.toString() ?? '']));
   }
-  /// The cars offered: a 7-seat Model Y comes with two motors only; a
-  /// 5-seat one, and the Model 3, with one (RWD) or two.
-  static const _cars = {
-    'model3rwd': 'Model 3 RWD',
-    'model3': 'Model 3 AWD',
-    'modelY5rwd': 'Model Y 5 seats RWD',
-    'modelY5': 'Model Y 5 seats AWD',
-    'modelY7': 'Model Y 7 seats',
-  };
-
-  /// The car as picked: its picture and steering, a 5-seater's third row
-  /// leaves the seat map, a rear-motor car's front leaves the ring; and back.
-  void _applyCar(String car) => _obd
-    ..model3 = car.startsWith('model3')
-    ..thirdRow = car == 'modelY7'
-    ..rwd = car.endsWith('rwd');
-  String get _car => _obd.model3
-      ? (_obd.rwd ? 'model3rwd' : 'model3')
-      : _obd.thirdRow
-          ? 'modelY7'
-          : _obd.rwd
-              ? 'modelY5rwd'
-              : 'modelY5';
-
-  /// Which car: a picture of each layout to tap, then for a 5-seater its
-  /// drive. Asked on the first launch; the settings change it after. Back
-  /// asks again (from the drive, the car): the dash needs the car.
+  /// Which car: a picture of each body and seats to tap ([Car.bodies]), then
+  /// its drive if it comes with one motor or two. Asked on the first launch;
+  /// the settings change it after. Back asks again (from the drive, the
+  /// car): the dash needs the car.
   Future<void> _askCar() async {
     while (true) {
       if (!mounted) return;
-      final car = await showDialog<String>(
+      final car = await showDialog<Car>(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
@@ -419,20 +403,16 @@ class _DashPageState extends State<DashPage> {
           title: const Text('Which car do you have?'),
           // Shrinks in a narrow window (split screen), never overflows.
           content: FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [
-            for (final (id, three, seven, label) in const [
-              ('model3', true, false, 'Model 3\n5 seats'),
-              ('modelY5', false, false, 'Model Y\n5 seats'),
-              ('modelY7', false, true, 'Model Y\n7 seats'),
-            ])
+            for (final body in Car.bodies)
               InkWell(
-                onTap: () => Navigator.pop(ctx, id),
+                onTap: () => Navigator.pop(ctx, body),
                 borderRadius: BorderRadius.circular(12),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   child: Column(children: [
-                    CarSeats(model3: three, thirdRow: seven, height: 150),
+                    CarSeats(car: body, height: 150),
                     const SizedBox(height: 8),
-                    Text(label, textAlign: TextAlign.center),
+                    Text('${body.model.label}\n${body.seats} seats', textAlign: TextAlign.center),
                   ]),
                 ),
               ),
@@ -440,14 +420,13 @@ class _DashPageState extends State<DashPage> {
         ),
       );
       if (!mounted) return;
-      if (car == 'modelY7') return _setCar(car!);
-      if (car != null) {
-        final rwd = await _choose('Which drive?', const [
-          (true, 'Rear-wheel drive', 'one motor'),
-          (false, 'All-wheel drive', 'two motors'),
-        ]);
-        if (rwd != null && mounted) return _setCar(rwd ? '${car}rwd' : car);
-      }
+      if (car == null) continue;
+      if (!car.bothDrives) return _setCar(car);
+      final rwd = await _choose('Which drive?', const [
+        (true, 'Rear-wheel drive', 'one motor'),
+        (false, 'All-wheel drive', 'two motors'),
+      ]);
+      if (rwd != null && mounted) return _setCar(car.withDrive(rwd: rwd)!);
     }
   }
 
@@ -741,9 +720,11 @@ class _DashPageState extends State<DashPage> {
     );
   }
 
-  Future<void> _setCar(String car) async {
-    if (mounted) setState(() => _applyCar(car));
-    (await SharedPreferences.getInstance()).setString('car', car);
+  /// The car as picked: its picture and steering, a 5-seater's third row
+  /// leaves the seat map, a rear-motor car's front leaves the ring; and back.
+  Future<void> _setCar(Car car) async {
+    if (mounted) setState(() => _obd.car = car);
+    (await SharedPreferences.getInstance()).setString('car', car.id);
   }
 
   bool _wasLive = false, _wasReady = false, _wasApproving = false;
@@ -1052,11 +1033,9 @@ class _DashPageState extends State<DashPage> {
           const SizedBox(height: 8),
           Row(children: [
             const Expanded(child: Text('Car')),
-            DropdownButton<String>(
-              value: _car,
-              items: [
-                for (final MapEntry(:key, :value) in _cars.entries) DropdownMenuItem(value: key, child: Text(value)),
-              ],
+            DropdownButton<Car>(
+              value: _obd.car,
+              items: [for (final c in Car.values) DropdownMenuItem(value: c, child: Text(c.label))],
               onChanged: (v) {
                 if (v == null) return;
                 _setCar(v);
@@ -1302,7 +1281,7 @@ class _DashPageState extends State<DashPage> {
                 // widens one side and the screen's centre is not the ring's.
                 // Not on a rear-motor car: its ring has the pedal (but not
                 // basic's speedometer face).
-                if (live && (!o.rwd || (_basic && _ringPage == 1)))
+                if (live && (!o.car.rwd || (_basic && _ringPage == 1)))
                   IgnorePointer(
                     child: RepaintBoundary(child: ListenableBuilder(
                       listenable: o.fast,
@@ -1410,7 +1389,7 @@ Widget _powerRing(Panda o, {required bool smooth, VoidCallback? onGear}) => Repa
           glideAll: smooth,
           frontKw: o.live ? o.frontKw : null,
           rearKw: o.live ? o.rearKw : null,
-          rearOnly: o.rwd,
+          rearOnly: o.car.rwd,
           pedalPct: o.live ? o.pedalPct : null,
           brakePct: o.wifiLive ? o.brakePct : null, // WiFi's alone: frozen once it stalls
           regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked

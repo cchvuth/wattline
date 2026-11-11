@@ -1,6 +1,10 @@
 /// Tesla CAN signals, from the public Model 3 DBC (github.com/joshwardell/
 /// model3dbc, MIT) unless an entry names another source, most often
 /// talas9's 2026.26 Model Y DBCs (github.com/talas9/tesla-can-signal-db).
+/// The messages read here, checked against talas9's 2026.26 DBCs for both
+/// bodies, are defined alike on the Model 3 and Model Y, but for 0x352, which
+/// the 3's chassis bus reuses (see Panda's packKwh). Not in them: the wheels'
+/// brake torque (0x185, from captures) and the motor power's 2026.38 spot.
 /// Bit numbering is DBC `@1`, i.e. little-endian/Intel, which is what
 /// `decode` implements.
 ///
@@ -82,6 +86,8 @@ const kSignals = <String, Sig>{
   // the drive power limit (now 32|9: rear 392 kW, front 208). Found from the
   // car's trace: +4 kW pulling away, -4 kW slowing, 0 parked. The old spot
   // now reads e.g. -382.5 kW parked. Raw 1024 is SNA, else full regen.
+  // The 2026.26 DBCs (both bodies) still have 0|11, from before the change:
+  // keep 41|11 whatever they say.
   'frontKw': Sig(0x2E5, 41, 11, scale: 0.5, signed: true, sna: 1024),
   'rearKw': Sig(0x266, 41, 11, scale: 0.5, signed: true, sna: 1024),
   // ID132 BMS_hvBusStatus, ~68 a second: the pack's voltage and current, to
@@ -126,10 +132,16 @@ const kSignals = <String, Sig>{
   // public DBC's 0|11 layout is the pre-2021 one. Seen in a capture from the
   // car: full 81.76, left 50.62, buffer 3.68 kWh while the screen
   // said 60 %, which is (left - buffer) / (full - buffer).
-  'packKwh': Sig(0x352, 16, 16, scale: 0.02, mux: 0, muxLen: 2),
-  'packLeftKwh': Sig(0x352, 32, 16, scale: 0.02, mux: 0, muxLen: 2),
+  // The page is 0|2, but its whole byte is read: the Model 3's chassis bus
+  // reuses 0x352 for TRCM_info, whose 8-bit index (10 to 20 in the 2026.26
+  // DBC) would read as a page, and bus tags no longer tell them apart (as
+  // for 0x2A7). The battery's own frames have nothing else in that byte, so
+  // pages 0 and 1 are a byte of 0 and 1; a TRCM index of 0 or 1, should one
+  // ever come, would still pass.
+  'packKwh': Sig(0x352, 16, 16, scale: 0.02, mux: 0, muxLen: 8),
+  'packLeftKwh': Sig(0x352, 32, 16, scale: 0.02, mux: 0, muxLen: 8),
   // Payload 1: the energy kept below the screen's 0 %, 0.01 kWh a count.
-  'packBufferKwh': Sig(0x352, 16, 16, scale: 0.01, mux: 1, muxLen: 2),
+  'packBufferKwh': Sig(0x352, 16, 16, scale: 0.01, mux: 1, muxLen: 8),
 
   // ID392 BMS_packConfig, payload 1: pack energy when new, per the 2026.26
   // Model Y DBC (github.com/talas9/tesla-can-signal-db); the public DBC had it

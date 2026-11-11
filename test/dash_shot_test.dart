@@ -12,6 +12,7 @@ import 'package:tesla_dash/commander.dart';
 import 'package:tesla_dash/gauge.dart';
 import 'package:tesla_dash/glyphs.dart';
 import 'package:tesla_dash/main.dart';
+import 'package:tesla_dash/car.dart';
 import 'package:tesla_dash/panda.dart';
 
 
@@ -188,8 +189,7 @@ final _shots = <String, (Size, Panda Function())>{
   // A rear-motor 5-seater: the pedals on the ring's right, no third row.
   'rear-motor-5-seats': (const Size(823.5, 384), () => _seen(_car()
     ..highBeam = true // a dark country road
-    ..rwd = true
-    ..thirdRow = false
+    ..car = Car.modelY5Rwd
     ..speed = 64
     ..gear = 'D'
     ..rearKw = 23
@@ -209,8 +209,7 @@ final _shots = <String, (Size, Panda Function())>{
     ..buckled.addAll({'D', 'P', '2R'}))),
   // A Model 3 braking at dusk, indicating left: its own corner lamps.
   'model-3': (const Size(823.5, 384), () => _seen(_car()
-    ..model3 = true
-    ..thirdRow = false
+    ..car = Car.model3
     ..drl = true
     ..lowBeam = true
     ..braking = true
@@ -846,7 +845,7 @@ void main() {
     expect(find.text('21°'), findsOneWidget);
     // A 5-seater (as picked): no third row to chime from or show.
     o
-      ..thirdRow = false
+      ..car = Car.modelY5
       ..notifyListeners();
     await t.pump();
     expect(seats(kAlert), findsNothing);

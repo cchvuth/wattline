@@ -5,6 +5,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'car.dart';
 import 'signals.dart';
 
 /// Live vehicle state, read off the CAN bus through the S3XY Commander's
@@ -60,22 +61,22 @@ class Panda extends ChangeNotifier {
   /// the rest: putting its value up would make the readout step once a second.
   void _motorFrame() {
     final p = packKw;
-    if (p == null || _rearAt == null || (_frontAt == null && !rwd)) return; // a whole reading
+    if (p == null || _rearAt == null || (_frontAt == null && !_car.rwd)) return; // a whole reading
     final rest = (p - (_frontAt ?? 0) - (_rearAt ?? 0) - (climateKw ?? 0) - (lvKw ?? 0)).clamp(0, 5).toDouble();
     final o = _other;
     _other = o == null ? rest : o + (rest - o) * 0.05; // about 20 frames' worth
   }
 
-  /// A rear-motor car (picked on the first launch): no front motor frames,
-  /// so the blend gives the rear all the motors' power. Picked mid-drive,
-  /// the last front reading goes too.
-  bool get rwd => _rwd;
-  set rwd(bool v) {
-    _rwd = v;
-    if (v) _frontAt = frontKw = null;
+  /// The car picked on the first launch (see [Car]). A rear-motor one has
+  /// no front motor frames, so the blend gives the rear all the motors'
+  /// power; picked mid-drive, the last front reading goes too.
+  Car get car => _car;
+  set car(Car c) {
+    _car = c;
+    if (c.rwd) _frontAt = frontKw = null;
   }
 
-  bool _rwd = false;
+  Car _car = Car.fallback;
 
   bool get _stopped => speed == 0 && (pedalPct ?? 0) == 0;
 
@@ -126,14 +127,6 @@ class Panda extends ChangeNotifier {
   double? _steerDeg;
   DateTime? _turnedAt;
   DateTime _steerAt = DateTime.fromMillisecondsSinceEpoch(0); // ID129's last frame
-
-  /// Steering wheel turns per road wheel turn, and the wheelbase, m: the path
-  /// lines' bicycle model. The Y's wheel turns about 450° each way to its
-  /// 32.8° lock, the 3's about 360° to its 34.1°.
-  /// ponytail: published figures; set them from a full-lock reading in the trace.
-  static const steerY = 13.7, steer3 = 10.6;
-  double get steerRatio => model3 ? steer3 : steerY;
-  double get wheelbase => model3 ? 2.875 : 2.89;
 
   /// The wheel turned past this shows the path lines.
   static const steerShowDeg = 3.0;
@@ -217,6 +210,7 @@ class Panda extends ChangeNotifier {
   double? packKwh; // nominal full pack
   double? packLeftKwh, packBufferKwh; // nominal energy left; below the screen's 0 %
   double? packNewKwh; // the same, when the pack was new
+  int? _bmsBus; // the bus the battery's own 0x352 frames come on: the car's, kept across links
   String? domeLight; // OFF / ON / AUTO
 
   // Weather and grip.
@@ -278,15 +272,9 @@ class Panda extends ChangeNotifier {
   double? get imbalanceMv =>
       cellVMax == null || cellVMin == null ? null : (cellVMax! - cellVMin!) * 1000;
 
-  /// The car has a third row (the car picked): a 5-seater has nowhere for
-  /// its belts to chime from.
-  bool thirdRow = true;
-
-  /// A Model 3 (the car picked), not a Y: its picture, and its steering.
-  bool model3 = false;
-
   bool get anyBeltUnbuckled =>
-      beltDriver || beltPass || belt2L || belt2C || belt2R || (thirdRow && !model3 && (belt3L || belt3R));
+      // A 5-seater has nowhere for third-row belts to chime from.
+      beltDriver || beltPass || belt2L || belt2C || belt2R || (_car.thirdRow && (belt3L || belt3R));
 
   /// Every write stamps the gear's age. 0x118 comes every 10 ms, so a P
   /// older than 2 s means the link stalled, and [parked] then fails closed:
@@ -462,7 +450,7 @@ class Panda extends ChangeNotifier {
   /// held against it: pushes come on a change, so the last one can be the
   /// drive's.
   void _btMotors(double? f, double? r) {
-    if (rwd) f = null; // whatever the Commander says of a motor the car has not
+    if (_car.rwd) f = null; // whatever the Commander says of a motor the car has not
     if (f == null && r == null) return;
     bool off(double? v, double max) => v != null && (v < -200 || v > max);
     bool moving(double? v) => v != null && v.abs() > 3;
@@ -1351,7 +1339,8 @@ class Panda extends ChangeNotifier {
           // Moving forward with ID129 off ([_steerGroup]): the path lines from
           // the turn the car makes, as the wheel angle that draws its radius.
           if (ms >= 3 && _gear != 'R' && DateTime.now().difference(_steerAt).inMilliseconds > 300) {
-            steerDeg = steerRatio * atan(wheelbase * v / ms) * 180 / pi;
+            final body = _car.model;
+            steerDeg = body.steerRatio * atan(body.wheelbase * v / ms) * 180 / pi;
           }
         case 'recirc':
           recirc = kRecirc[v.round()];
@@ -1469,7 +1458,7 @@ class Panda extends ChangeNotifier {
           // The front light bar: DRL by day, the position lamp with
           // headlights or parking lights (CUSTOM light shows excluded).
           drl = v == 15 ? null : v >= 1 && v <= 4;
-        case 'frontKw' when !rwd:
+        case 'frontKw' when !_car.rwd:
           _frontAt = v;
           _motorFrame();
           _blend();
@@ -1514,15 +1503,17 @@ class Panda extends ChangeNotifier {
         case 'cellVMin':
           cellVMin = v > 5 ? null : v;
         case 'packKwh':
+          _bmsBus = bus; // the battery's own frame (see signals.dart)
           packKwh = v < 30 || v > 150 ? null : v; // SNA, or not this layout
         case 'packLeftKwh':
           packLeftKwh = v > 150 ? null : v;
         case 'packBufferKwh':
           packBufferKwh = v > 20 ? null : v;
         case 'packNewKwh':
-          // Same bus as BMS_energyStatus, which no other bus reuses: 0x392
-          // also names EPAS alerts on the party bus (see signals.dart).
-          if (v >= 40 && v <= 110 && bus == frames[0x352]?.bus) packNewKwh = v;
+          // On the battery's bus ([_bmsBus]): 0x392 also names EPAS alerts on
+          // the party bus. A link that tags every frame with one bus cannot
+          // tell them apart; the plausible range is then all that guards it.
+          if (v >= 40 && v <= 110 && bus == _bmsBus) packNewKwh = v;
         case 'domeLight':
           domeLight = kDome[v.round()];
         case 'speedLimit':

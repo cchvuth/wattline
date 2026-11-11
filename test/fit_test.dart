@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:tesla_dash/car.dart';
 import 'package:tesla_dash/changelog.dart';
 import 'package:tesla_dash/commander.dart';
 import 'package:tesla_dash/diag.dart';
@@ -138,16 +139,16 @@ void main() {
     await t.tap(find.byIcon(Icons.wifi_off));
     await _frames(t);
     Future<void> pick(String label) async {
-      await t.ensureVisible(find.byType(DropdownButton<String>));
-      await t.tap(find.byType(DropdownButton<String>));
+      await t.ensureVisible(find.byType(DropdownButton<Car>));
+      await t.tap(find.byType(DropdownButton<Car>));
       await _frames(t);
       await t.tap(find.text(label).last);
       await _frames(t);
     }
     await pick('Model 3 RWD');
-    expect((o.model3, o.rwd, o.thirdRow, o.steerRatio), (true, true, false, Panda.steer3));
+    expect(o.car, Car.model3Rwd);
     await pick('Model Y 7 seats');
-    expect((o.model3, o.rwd, o.thirdRow, o.steerRatio), (false, false, true, Panda.steerY));
+    expect(o.car, Car.modelY7);
     expect((await SharedPreferences.getInstance()).getString('car'), 'modelY7');
     await t.pump(const Duration(seconds: 1)); // the settings' fields' delayed disposal
     await t.pumpWidget(const SizedBox());
