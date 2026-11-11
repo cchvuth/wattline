@@ -1,7 +1,9 @@
 // What changed in each release, shown once after an update (every version
 // since the one last run; all of them to one who never saw it) and from the
-// settings, with a screenshot or two where the dash looks different. Newest first; a release adds its entry here (a test holds the
-// pubspec's version to one), and its GitHub notes say the same.
+// settings, with a screenshot or two where the dash looks different. Newest
+// first; a release adds its entry here (a test holds the pubspec's version to
+// one), and its GitHub notes say the same. Each big feature its own line, the
+// rest one line: "Bug fixes and improvements" (every entry rewritten so).
 import 'package:flutter/material.dart';
 
 import 'update.dart';
@@ -10,73 +12,44 @@ typedef Change = ({String version, String title, List<String> notes, List<String
 
 const kChangelog = <Change>[
   (
-    version: '1.2.1',
-    title: 'Model 3 fix',
+    version: '1.3.0',
+    title: 'Model Y L',
     notes: [
-      "Model 3: the battery's figures (pack energy, the buffer, the capacity when new) no longer pick up an "
-          'unrelated frame its chassis bus sends on the same id',
-      'A car saved by a newer version is asked again rather than guessed',
+      "The 6-seat Model Y L as a car to pick, with captain's chairs in the second row",
+      "The front light bar lights as the car's own strip across the nose, on the Model Y and Y L",
+      'Settings in pages (Connection, Car, Advanced); the car picked from its pictures, drawn to scale',
+      'Bug fixes and improvements',
     ],
-    shots: [],
+    shots: ['model-y-l.jpg'],
   ),
+  (version: '1.2.1', title: 'Bug fixes', notes: ['Bug fixes and improvements'], shots: []),
   (
     version: '1.2.0',
     title: 'Model 3',
     notes: [
-      'The Model 3 can be picked as the car (first launch, or the settings): its own picture and seats, rear- '
-          'or all-wheel drive',
-      "Its lights as the car's: the DRL strips and tail lamps at the corners, each with a glow, more with the "
-          'beams on; the indicator under the DRL, on the wing and in the tail lamp',
-      'The settings pick the car from a list',
+      'The Model 3 as a car to pick, rear- or all-wheel drive, with its own lights',
+      'Bug fixes and improvements',
     ],
     shots: ['model-3.jpg'],
   ),
-  (
-    version: '1.1.1',
-    title: 'Bug fixes',
-    notes: [
-      "Updates: Android's install confirmation waits until the car stops",
-      "The speed limit sign clears when the car doesn't know the limit",
-      'After a WiFi dropout, the brake line, gear, speed limit and lamps no longer look live',
-      'Basic layout: the g-meter shows only with the WiFi stream (Bluetooth has no g)',
-      "Bluetooth: comes back after the phone's Bluetooth is switched on while WiFi starts; one prompt to switch "
-          'it on per press',
-    ],
-    shots: [],
-  ),
+  (version: '1.1.1', title: 'Bug fixes', notes: ['Bug fixes and improvements'], shots: []),
   (
     version: '1.1.0',
     title: "What's new",
     notes: [
-      "This list: after an update, what changed since the version you last ran, with screenshots; any time "
-          "from the settings (What's new)",
-      'First launch: the layout question shows each mode as it looks',
-      'The car controls (locks, honk, flash, climate) have a car icon in the bottom bar',
+      "This list of what changed after an update, with screenshots; any time from the settings",
+      'Bug fixes and improvements',
     ],
     shots: [],
   ),
-  (
-    version: '1.0.9',
-    title: 'Speedometer and power card fixes',
-    notes: [
-      'Speedometer: washer fluid low, the cruise set speed and the charging line show here too, under the gear; '
-          'charging shows its power in place of the speed; the needle hides when the link drops',
-      "The ring's page is kept when switching layouts",
-      'Power card: battery and range keep updating whatever the other card shows; works over Bluetooth alone',
-      'Rear-motor cars: the pedal bar shows on the speedometer face',
-    ],
-    shots: [],
-  ),
+  (version: '1.0.9', title: 'Bug fixes', notes: ['Bug fixes and improvements'], shots: []),
   (
     version: '1.0.8',
     title: 'Speedometer and power card',
     notes: [
-      "Basic layout: swipe the ring up or down to a speedometer, a gas car's dial with a needle that trails a "
-          'blue glow as the speed changes',
-      "A power card for either side: the battery's draw round a dial (regen in green), the battery level and "
-          'the range at its foot',
-      'The outside temperature on the ring, as in the full layout',
-      'G-meter: a bigger dot in the basic layout, the drive\'s reach in a stronger blue',
+      "Basic layout: swipe the ring up or down to a speedometer",
+      "A power card for either side: the battery's draw round a dial, its level and the range",
+      'Bug fixes and improvements',
     ],
     shots: ['basic-speedo.jpg', 'basic-dials.jpg'],
   ),
@@ -84,32 +57,18 @@ const kChangelog = <Change>[
     version: '1.0.7',
     title: 'Smoother speed',
     notes: [
-      'The speed and the ring no longer stutter on the move: the steering angle streams only when parking, and '
-          "moving, the path lines follow the car's own turn",
-      'A picture of the steering wheel shows the right scroll wheel to double-press when approving the phone',
-      'Full layout: the car a little lower, with more of the road ahead',
-      'BRAKE APPLIED in bold',
+      'The speed and the ring no longer stutter on the move',
+      'Bug fixes and improvements',
     ],
     shots: [],
   ),
-  (
-    version: '1.0.6',
-    title: 'Bug fixes',
-    notes: [
-      'Autopilot icon: TACC shows its blue cruise icon over WiFi too; the hands-on nag turns red once the car chimes',
-      'Updates: never installed on the move; one download at a time',
-      'First launch: closed midway, the setup pages come back at the next start',
-      'A failed WiFi join blames the password only when the network was in range',
-    ],
-    shots: [],
-  ),
+  (version: '1.0.6', title: 'Bug fixes', notes: ['Bug fixes and improvements'], shots: []),
   (
     version: '1.0.5',
-    title: 'UI adjustments',
+    title: 'Layout switch',
     notes: [
-      "Autopilot as the car's own icon at the ring's top right; the outside temperature at its top left",
       'Tap the gear under the speed to switch between the full and basic layouts',
-      'Full layout: a bigger car and battery dial; 12 V, other power and cell imbalance behind a settings switch',
+      'Bug fixes and improvements',
     ],
     shots: ['cold-morning.jpg'],
   ),
@@ -117,9 +76,8 @@ const kChangelog = <Change>[
     version: '1.0.4',
     title: 'Basic layout',
     notes: [
-      'Basic layout: the ring between two swipeable stacks of big cards (energy, drive, car, buttons, route); '
-          'pick it in the settings',
-      'BRAKE APPLIED under the brake line while braking',
+      'The basic layout: big cards beside the ring, swipe either side for more; pick it in the settings',
+      'Bug fixes and improvements',
     ],
     shots: ['basic-1.jpg'],
   ),
@@ -127,8 +85,8 @@ const kChangelog = <Change>[
     version: '1.0.3',
     title: 'Brake line',
     notes: [
-      "The brake line from the wheels' brake torque: a light press shows, a hard one fills it",
-      'Setup: change the WiFi name and password the app joins with',
+      "The brake line on the ring, from the wheels' brake torque",
+      'Bug fixes and improvements',
     ],
     shots: [],
   ),
