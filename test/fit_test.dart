@@ -35,6 +35,22 @@ Future<void> _frames(WidgetTester t, [int n = 30]) async {
   }
 }
 
+/// Opens a settings page from the list (back to the list first, if on one).
+Future<void> _page(WidgetTester t, String name) async {
+  await _back(t);
+  await t.ensureVisible(find.text(name).first);
+  await t.tap(find.text(name).first);
+  await _frames(t);
+}
+
+/// Back to the settings' list from a page, if on one.
+Future<void> _back(WidgetTester t) async {
+  if (find.byIcon(Icons.arrow_back).evaluate().isEmpty) return;
+  await t.ensureVisible(find.byIcon(Icons.arrow_back));
+  await t.tap(find.byIcon(Icons.arrow_back));
+  await _frames(t);
+}
+
 /// Raises the keyboard as Android 11+ does: its inset eases in over 285 ms,
 /// a frame at a time, and the focused field scrolls into view as it rises.
 Future<void> _raise(WidgetTester t, double kb) async {
@@ -138,19 +154,73 @@ void main() {
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
     await t.tap(find.byIcon(Icons.wifi_off));
     await _frames(t);
-    Future<void> pick(String label) async {
-      await t.ensureVisible(find.byType(DropdownButton<Car>));
-      await t.tap(find.byType(DropdownButton<Car>));
-      await _frames(t);
-      await t.tap(find.text(label).last);
+    // The car's row, on the Car page, opens the pictures: a body, then its
+    // drive if it has two.
+    await _page(t, 'Car');
+    Future<void> open() async {
+      await t.ensureVisible(find.byIcon(Icons.chevron_right));
+      await t.tap(find.byIcon(Icons.chevron_right));
       await _frames(t);
     }
-    await pick('Model 3 RWD');
+    await open();
+    expect(find.text('Which car do you have?'), findsOneWidget);
+    await t.tap(find.text('Model 3'));
+    await _frames(t);
+    await t.tap(find.text('Rear-wheel drive (one motor)'));
+    await _frames(t);
     expect(o.car, Car.model3Rwd);
-    await pick('Model Y 7 seats');
+    expect(find.text('Model 3 RWD'), findsOneWidget); // the row says so
+    // Left without a pick: the car stays.
+    await open();
+    await t.tapAt(const Offset(4, 4));
+    await _frames(t);
+    expect(o.car, Car.model3Rwd);
+    await open();
+    await t.tap(find.text('7 seats'));
+    await _frames(t);
     expect(o.car, Car.modelY7);
     expect((await SharedPreferences.getInstance()).getString('car'), 'modelY7');
     await t.pump(const Duration(seconds: 1)); // the settings' fields' delayed disposal
+    await t.pumpWidget(const SizedBox());
+  });
+
+  // Done on the list, Car and Advanced; a connection field changed and left
+  // there is kept by it all the same.
+  testWidgets('settings: Done keeps a changed connection field', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: Panda(), bt: Commander())));
+    await t.tap(find.byIcon(Icons.wifi_off));
+    await _frames(t);
+    expect(find.text('Done'), findsOneWidget);
+    expect(find.text('Reconnect'), findsNothing);
+    await _page(t, 'Connection');
+    expect(find.text('Reconnect'), findsOneWidget);
+    await t.enterText(find.widgetWithText(TextField, 'Host'), '10.0.0.9');
+    await _back(t);
+    await t.tap(find.text('Done'));
+    await _frames(t);
+    expect((await SharedPreferences.getInstance()).getString('host'), '10.0.0.9');
+    await t.pump(const Duration(seconds: 1)); // the fields' delayed disposal
+    await t.pumpWidget(const SizedBox());
+  });
+
+  // Android's back on a page: to the list, the settings still open; on the
+  // list, out, a changed field kept as Done keeps it.
+  testWidgets('settings: back goes to the list, then out', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: Panda(), bt: Commander())));
+    await t.tap(find.byIcon(Icons.wifi_off));
+    await _frames(t);
+    await _page(t, 'Connection');
+    await t.enterText(find.widgetWithText(TextField, 'Port'), '1400');
+    await t.binding.handlePopRoute();
+    await _frames(t);
+    expect(find.text('Advanced'), findsOneWidget); // the list
+    await t.binding.handlePopRoute();
+    await _frames(t);
+    expect(find.text('Advanced'), findsNothing); // closed
+    expect((await SharedPreferences.getInstance()).getInt('port'), 1400);
+    await t.pump(const Duration(seconds: 1)); // the fields' delayed disposal
     await t.pumpWidget(const SizedBox());
   });
 
@@ -158,6 +228,7 @@ void main() {
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: Panda(), bt: Commander())));
     await t.tap(find.byIcon(Icons.wifi_off));
     await _frames(t);
+    await _page(t, 'Connection');
     await _fits(t, 'Reconnect');
     await t.pumpWidget(const SizedBox()); // dispose, cancel timers
   });
@@ -230,13 +301,17 @@ void main() {
     await t.tap(find.byIcon(Icons.wifi_off));
     await _frames(t);
     final prefs = await SharedPreferences.getInstance();
-    // A slider is in the row of its label.
+    // A slider or a switch is in the row of its label.
     Finder slider(String label) => find.descendant(
         of: find.ancestor(of: find.textContaining(label), matching: find.byType(Row)),
         matching: find.byType(Slider));
+    Finder toggle(String label) => find.descendant(
+        of: find.ancestor(of: find.text(label), matching: find.byType(Row)), matching: find.byType(Switch));
+    // The timings and the polling are on the Advanced page.
+    await _page(t, 'Advanced');
     // The defaults, the owner's from the car: Bluetooth waits for the stream,
     // so no scan time and no buttons' wait, and the fallback has nothing to time.
-    final waits = find.byType(Switch).first;
+    final waits = toggle('Bluetooth waits for the WiFi stream, no time limit');
     expect(find.text('Bluetooth waits for the WiFi stream, no time limit'), findsOneWidget);
     expect(t.widget<Switch>(waits).value, isTrue);
     expect(find.textContaining('WiFi scan time'), findsNothing);
@@ -272,7 +347,8 @@ void main() {
     expect(find.text('Bluetooth buttons after WiFi is live: 10.0 s'), findsOneWidget);
     // Basic layout: off unless switched on, and kept; back off, for the
     // full layout's switch below (basic shows those figures whatever it says).
-    final basic = find.byType(Switch).at(1);
+    await _page(t, 'Car'); // the layout's switches
+    final basic = toggle('Basic layout (bigger text, swipe the side cards)');
     expect(t.widget<Switch>(basic).value, isFalse);
     await t.ensureVisible(basic);
     await t.tap(basic);
@@ -285,7 +361,7 @@ void main() {
     expect(find.byType(PageView), findsNothing);
     // The power ring's glide: off unless switched on, and kept.
     expect(find.text('Smooth power ring (more battery)'), findsOneWidget);
-    final smooth = find.byType(Switch).at(2);
+    final smooth = toggle('Smooth power ring (more battery)');
     expect(t.widget<Switch>(smooth).value, isFalse);
     await t.ensureVisible(smooth);
     await t.tap(smooth);
@@ -294,7 +370,7 @@ void main() {
     expect(prefs.getBool('smoothRing'), isTrue);
     // The full layout's 12 V, other power and cell imbalance: hidden unless
     // switched on, kept, and on the dash at once.
-    final minor = find.byType(Switch).at(3);
+    final minor = toggle('Show 12 V, other power and cell imbalance');
     expect(t.widget<Switch>(minor).value, isFalse);
     expect(find.text('IMBALANCE'), findsNothing);
     expect(find.text('DEGRADATION'), findsOneWidget);
@@ -304,7 +380,8 @@ void main() {
     expect(prefs.getBool('minorFigures'), isTrue);
     expect(find.text('IMBALANCE'), findsOneWidget);
     // Sparse polling: on unless switched off, kept, and told to the link.
-    final sparse = find.byType(Switch).last;
+    await _page(t, 'Advanced');
+    final sparse = toggle('Sparse polling (steadier speed, slower doors and belts)');
     expect(t.widget<Switch>(sparse).value, isTrue);
     await t.ensureVisible(sparse);
     await t.tap(sparse);
@@ -384,20 +461,23 @@ void main() {
     // Back in the settings, their fields have the new login: saving keeps it.
     Future<void> closeSetup() async {
       for (var i = 0; i < 2; i++) {
-        await t.tap(find.text('Done'));
+        await t.tap(find.text('Done').last); // the setup page's, over the settings' own
         await _frames(t);
       }
     }
 
     await closeSetup();
+    await _page(t, 'Connection');
     String field(String label) => t.widget<TextField>(find.widgetWithText(TextField, label)).controller!.text;
     expect((field('WiFi name'), field('WiFi password')), ('MyCommander', 'hunter22'));
     // Typed there, the setup steps only looked at: what is typed stays.
     await t.enterText(find.widgetWithText(TextField, 'WiFi password'), 'typed');
+    await _back(t);
     await t.ensureVisible(find.text('Setup steps'));
     await t.tap(find.text('Setup steps'));
     await _frames(t);
     await closeSetup();
+    await _page(t, 'Connection');
     expect(field('WiFi password'), 'typed');
     await t.pump(const Duration(seconds: 1)); // the fields' delayed disposal
     await t.pumpWidget(const SizedBox());
@@ -409,11 +489,15 @@ void main() {
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: Panda(), bt: Commander())));
     await t.tap(find.byIcon(Icons.wifi_off));
     await _frames(t);
+    await _page(t, 'Advanced');
     expect(find.textContaining('WiFi scan time'), findsNothing);
     expect(find.text('Bluetooth off before WiFi starts: 3.0 s'), findsOneWidget);
     // Not with the switch off either.
-    await t.ensureVisible(find.byType(Switch).first);
-    await t.tap(find.byType(Switch).first);
+    final waits = find.descendant(
+        of: find.ancestor(of: find.text('Bluetooth waits for the WiFi stream, no time limit'), matching: find.byType(Row)),
+        matching: find.byType(Switch));
+    await t.ensureVisible(waits);
+    await t.tap(waits);
     await _frames(t);
     expect(find.textContaining('WiFi scan time'), findsNothing);
     await t.pumpWidget(const SizedBox());

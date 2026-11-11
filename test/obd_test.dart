@@ -705,7 +705,7 @@ void main() {
 
   test('a rear-motor car: the rear follows the pack alone', () {
     final p = Panda()
-      ..car = Car.modelY5Rwd // as picked
+      ..car = Car.modelY5Rwd
       ..onFrame(0x118, 1, [0, 0, 0x80, 0, 0, 0, 0, 0]) // D
       ..speed = 30
       ..onFrame(0x132, 1, pack(400, -20)) // 8 kW from the pack

@@ -230,6 +230,30 @@ final _shots = <String, (Size, Panda Function())>{
     ..fan2 = 'OFF'
     ..buckled.addAll({'D', 'P'})
     ..belt2L = true)),
+  // A Model Y L by night, indicating right: six seats, light bars as the
+  // Y's, the second row's right seat unbuckled.
+  'model-y-l': (const Size(823.5, 384), () => _seen(_car()
+    ..car = Car.modelYL
+    ..drl = true
+    ..lowBeam = true
+    ..braking = true
+    ..indR = true
+    ..blinkLit = true
+    ..speed = 31
+    ..gear = 'D'
+    ..frontKw = 6
+    ..rearKw = 11
+    ..socPct = 71
+    ..rangeMi = 250
+    ..speedLimit = 50
+    ..outsideC = 14
+    ..cabinC1 = 21
+    ..cabinC2 = 21
+    ..cabinC3 = 20
+    ..fan1 = '2'
+    ..fan2 = '1'
+    ..buckled.addAll({'D', 'P', '2L', '3R'})
+    ..belt2R = true)),
   // A Supercharger in the cold: the pack still warming holds it back.
   'charging': (const Size(823.5, 384), () => _seen(_car()
     ..speed = 0

@@ -272,9 +272,24 @@ class Panda extends ChangeNotifier {
   double? get imbalanceMv =>
       cellVMax == null || cellVMin == null ? null : (cellVMax! - cellVMin!) * 1000;
 
-  bool get anyBeltUnbuckled =>
-      // A 5-seater has nowhere for third-row belts to chime from.
-      beltDriver || beltPass || belt2L || belt2C || belt2R || (_car.thirdRow && (belt3L || belt3R));
+  /// A seat's belt chime, by the seat's name ([Car.seatNames]).
+  bool unbuckledAt(String seat) => switch (seat) {
+        'D' => beltDriver,
+        'P' => beltPass,
+        '2L' => belt2L,
+        '2C' => belt2C,
+        '2R' => belt2R,
+        '3L' => belt3L,
+        '3R' => belt3R,
+        _ => false,
+      };
+
+  /// Only the seats the car has: a 5-seater has nowhere for third-row belts
+  /// to chime from, the L no second-row middle.
+  bool get anyBeltUnbuckled => _car.seatNames.any(unbuckledAt);
+
+  /// The front lamps lit: DRL, low or high beams.
+  bool get frontLit => drl == true || lowBeam == true || highBeam == true;
 
   /// Every write stamps the gear's age. 0x118 comes every 10 ms, so a P
   /// older than 2 s means the link stalled, and [parked] then fails closed:

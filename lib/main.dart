@@ -389,15 +389,16 @@ class _DashPageState extends State<DashPage> {
         .then((p) => p.setStringList('tyres', [for (final v in t) v?.toString() ?? '']));
   }
   /// Which car: a picture of each body and seats to tap ([Car.bodies]), then
-  /// its drive if it comes with one motor or two. Asked on the first launch;
-  /// the settings change it after. Back asks again (from the drive, the
-  /// car): the dash needs the car.
-  Future<void> _askCar() async {
+  /// its drive if it comes with one motor or two. Asked on the first launch
+  /// ([must]): back asks again (from the drive, the car), as the dash needs
+  /// the car. From the settings: the car it is outlined, and back leaves it.
+  Future<void> _askCar({bool must = true}) async {
     while (true) {
       if (!mounted) return;
+      final now = _obd.car, longest = Model.values.map((m) => m.length).reduce(max);
       final car = await showDialog<Car>(
         context: context,
-        barrierDismissible: false,
+        barrierDismissible: !must,
         builder: (ctx) => AlertDialog(
           scrollable: true,
           title: const Text('Which car do you have?'),
@@ -407,12 +408,26 @@ class _DashPageState extends State<DashPage> {
               InkWell(
                 onTap: () => Navigator.pop(ctx, body),
                 borderRadius: BorderRadius.circular(12),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Container(
+                  width: 112, // every option as wide: the labels line up evenly
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: !must && body.model == now.model && body.seats == now.seats
+                      ? BoxDecoration(borderRadius: BorderRadius.circular(12), border: Border.all(color: kAccent))
+                      : null,
                   child: Column(children: [
-                    CarSeats(car: body, height: 150),
-                    const SizedBox(height: 8),
-                    Text('${body.model.label}\n${body.seats} seats', textAlign: TextAlign.center),
+                    // To scale: the longest 150 high, all on one line.
+                    SizedBox(
+                      height: 150,
+                      child: Align(
+                        alignment: Alignment.bottomCenter,
+                        child: CarSeats(
+                            car: body,
+                            height: 150 * body.model.length / longest),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(body.model.label, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text('${body.seats} seats', style: const TextStyle(fontSize: 13, color: Colors.white60)),
                   ]),
                 ),
               ),
@@ -420,20 +435,25 @@ class _DashPageState extends State<DashPage> {
         ),
       );
       if (!mounted) return;
-      if (car == null) continue;
+      if (car == null) {
+        if (must) continue;
+        return;
+      }
       if (!car.bothDrives) return _setCar(car);
       final rwd = await _choose('Which drive?', const [
         (true, 'Rear-wheel drive', 'one motor'),
         (false, 'All-wheel drive', 'two motors'),
-      ]);
+      ], dismissible: !must);
       if (rwd != null && mounted) return _setCar(car.withDrive(rwd: rwd)!);
+      if (!must) return; // from the settings, back leaves it
     }
   }
 
   /// A first-launch question: each option its label and what it means.
-  Future<T?> _choose<T>(String title, List<(T, String, String)> options) => showDialog<T>(
+  Future<T?> _choose<T>(String title, List<(T, String, String)> options, {bool dismissible = false}) =>
+      showDialog<T>(
         context: context,
-        barrierDismissible: false,
+        barrierDismissible: dismissible,
         builder: (ctx) => SimpleDialog(
           title: Text(title),
           children: [
@@ -880,9 +900,63 @@ class _DashPageState extends State<DashPage> {
             },
           ),
         ]);
+    const status = TextStyle(color: Colors.white70, fontSize: 13);
+    // Which group's page is up (none: the list of them).
+    String? page;
+    void go(StateSetter redraw, String? to) {
+      if (scroll.hasClients) scroll.jumpTo(0); // each page from its top
+      redraw(() => page = to);
+    }
+    // A group's row on the list: its icon, name and state, to its page; the
+    // connection's state live (both links), as the icons it opens from show.
+    Widget group(StateSetter redraw, String to, String title, String? summary, IconData icon) => InkWell(
+          onTap: () => go(redraw, to),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(children: [
+              Icon(icon, color: Colors.white70),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(title, style: const TextStyle(fontSize: 16)),
+                  summary != null
+                      ? Text(summary, style: status, maxLines: 1, overflow: TextOverflow.ellipsis)
+                      : ListenableBuilder(
+                          listenable: Listenable.merge([_obd, _bt]),
+                          builder: (context, _) => Text(
+                              'WiFi ${_obd.wifiLive ? 'live' : _obd.status} · Bluetooth ${_bt.ready ? 'connected' : _bt.status}',
+                              style: status,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                ]),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white54),
+            ]),
+          ),
+        );
+    // A page's top: back to the list, and its name.
+    Widget back(StateSetter redraw, String title) => Row(children: [
+          IconButton(
+            onPressed: () => go(redraw, null),
+            icon: const Icon(Icons.arrow_back),
+            tooltip: 'Settings',
+            padding: EdgeInsets.zero,
+            visualDensity: VisualDensity.compact,
+          ),
+          const SizedBox(width: 8),
+          Text(title, style: Theme.of(context).textTheme.headlineSmall),
+        ]);
     final action = await showDialog<String>(
       context: context,
-      builder: (ctx) => StatefulBuilder(builder: (ctx, redraw) => AlertDialog(
+      // Back (or a tap outside) on a page goes to the list, not out.
+      builder: (ctx) => StatefulBuilder(builder: (ctx, redraw) => PopScope(
+        canPop: page == null,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) go(redraw, null);
+        },
+        child: AlertDialog(
         // The padding scrolls too, so a big keyboard leaves room for the
         // buttons alone; the bar at the dialog's edge.
         contentPadding: EdgeInsets.zero,
@@ -895,178 +969,195 @@ class _DashPageState extends State<DashPage> {
           thumbVisibility: true,
           child: SingleChildScrollView(
             controller: scroll,
-            padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text('Commander link', style: Theme.of(context).textTheme.headlineSmall),
-                ),
-              ),
-          // What the WiFi icon stands for.
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-                _obd.wifiLive
-                    ? 'Live: ${_obd.speedHz} speed frames/s (the car sends about 50), ${_obd.frameHz} frames/s in all, from $_host:$_port'
-                    : _obd.status,
-                style: const TextStyle(color: Colors.white70)),
-          ),
-          // And what the Bluetooth icon stands for.
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ListenableBuilder(
-              listenable: _bt,
-              builder: (context, _) => Text(
-                  _bt.ready
-                      ? 'Commander Bluetooth: connected. Car data: ${_bt.pushInfo}, ${_bt.pushCount} pushes. ${_bt.carLink}.'
-                      : 'Commander Bluetooth: ${_bt.status}',
-                  style: const TextStyle(color: Colors.white70)),
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Wrap(children: [ // onto a second line rather than off a narrow screen
-              // A WiFi login changed there is the one to keep: the fields
-              // here take it, or saving would put the old one back. Not
-              // changed, what is typed here stays.
-              TextButton(
-                  onPressed: () async {
-                    final was = (_ssid, _password);
-                    await _setupHelp();
-                    if ((_ssid, _password) != was) {
-                      ssid.text = _ssid;
-                      password.text = _password;
-                    }
-                  },
-                  child: const Text('Setup steps')),
-              // Every release (the changelog is this build's).
-              TextButton(onPressed: () => showWhatsNew(context, kChangelog), child: const Text("What's new")),
-              if (_update case final u?)
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _installUpdate();
-                  },
-                  child: Text('Update to ${u.version}'),
-                ),
-            ]),
-          ),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: ssid,
-                decoration: const InputDecoration(labelText: 'WiFi name'),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: TextField(
-                controller: password,
-                decoration: const InputDecoration(labelText: 'WiFi password'),
-              ),
-            ),
-          ]),
-          Row(children: [
-            Expanded(
-              child: TextField(
-                controller: host,
-                decoration: const InputDecoration(labelText: 'Host'),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: TextField(
-                controller: port,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Port'),
-              ),
-            ),
-          ]),
-          // How long the look for the network waits for the phone's scan, at
-          // most: it answers on the first results that hold the network. Not
-          // below 1 s, which only reads the scan before (a miss, or a stale
-          // yes). None with the switch on: the look then has no limit, as
-          // Bluetooth has none. Android only: iOS joins in Settings.
-          if (defaultTargetPlatform == TargetPlatform.android && !_wifiFirst)
-            gap('WiFi scan time', _lookMs, 10, 'wifiLookMs',
-                (v) { _lookMs = v; _applyLook(); }, redraw, min: 1),
-          // Bluetooth never starts a link while WiFi is mid-try. This holds it
-          // back until the WiFi stream runs, however long: for a Commander
-          // that drops its WiFi when Bluetooth comes first. With no WiFi
-          // stream (ScanMyTesla off) there is then no Bluetooth either. It also
-          // takes the time limit off WiFi's look for the network.
-          const SizedBox(height: 8),
-          toggle('Bluetooth waits for the WiFi stream, no time limit', _wifiFirst, (v) {
-            _wifiFirst = v;
-            _applyLook();
-            _obd.relook(); // a look in progress takes the new limit now
-          }, redraw, key: 'btWifiFirst'),
-          // Bluetooth stays off the Commander while its WiFi stream starts:
-          // the dash has no buttons for that spell, shorter if these hold.
-          gap('Bluetooth off before WiFi starts', _settleMs, 5, 'btSettleMs',
-              (v) => _settleMs = v, redraw),
-          // Two waits, the buttons then the data; one with the switch on
-          // (see [_startMs]).
-          if (!_wifiFirst)
-            gap('Bluetooth buttons after WiFi is live', _buttonsMs, 10, 'btButtonsMs',
-                (v) => _buttonsMs = v, redraw),
-          gap(_wifiFirst ? 'Bluetooth after WiFi is live' : 'Bluetooth data after WiFi is live',
-              _rejoinMs, 10, 'btRejoinMs', (v) => _rejoinMs = v, redraw),
-          // With the switch on Bluetooth waits for the stream however long,
-          // so this fallback has nothing to time.
-          gap('Bluetooth back if no WiFi stream', _backMs, 30, 'btBackMs',
-              (v) => _backMs = v, redraw, on: !_wifiFirst),
-          // Gliding on every change keeps the screen redrawing at its full
-          // rate: a third of the app's CPU in a replayed drive. Off, small
-          // changes land at once and only jumps glide.
-          const SizedBox(height: 8),
-          toggle('Basic layout (bigger text, swipe the side cards)', _basic, _setBasic, redraw),
-          toggle('Smooth power ring (more battery)', _smooth, (v) => _smooth = v, redraw, key: 'smoothRing'),
-          // The figures few glance at: off, the rows go, the rest closes up.
-          toggle('Show 12 V, other power and cell imbalance', _minor, (v) => _minor = v, redraw, key: 'minorFigures'),
-          // Off, every id streams: doors and belts live, but more frames for
-          // the Commander to drop, speed's among them.
-          toggle('Sparse polling (steadier speed, slower doors and belts)', _sparse, (v) => _obd.sparse = _sparse = v,
-              redraw, key: 'sparsePolling'),
-          const SizedBox(height: 8),
-          Row(children: [
-            const Expanded(child: Text('Car')),
-            DropdownButton<Car>(
-              value: _obd.car,
-              items: [for (final c in Car.values) DropdownMenuItem(value: c, child: Text(c.label))],
-              onChanged: (v) {
-                if (v == null) return;
-                _setCar(v);
-                redraw(() {});
-              },
-            ),
-          ]),
-        ]),
+            padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+            // One width for every page: the dialog keeps its size between them.
+            child: SizedBox(width: 540, child: Column(mainAxisSize: MainAxisSize.min, children: switch (page) {
+              // The groups, each its own page, and the links.
+              null => [
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Settings', style: Theme.of(context).textTheme.headlineSmall),
+                  ),
+                  const SizedBox(height: 8),
+                  group(redraw, 'connection', 'Connection', null, Icons.wifi),
+                  group(redraw, 'car', 'Car', '${_obd.car.label}, ${_basic ? 'basic' : 'full'} layout', Icons.directions_car_outlined),
+                  group(redraw, 'advanced', 'Advanced', 'Polling and Bluetooth timing', Icons.tune),
+                  const SizedBox(height: 8),
+                  // The rest, as links: onto a second line rather than off a narrow screen.
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Wrap(spacing: 4, children: [
+                      // A WiFi login changed there is the one to keep: the fields
+                      // here take it, or saving would put the old one back. Not
+                      // changed, what is typed here stays.
+                      TextButton(
+                          onPressed: () async {
+                            final was = (_ssid, _password);
+                            await _setupHelp();
+                            if ((_ssid, _password) != was) {
+                              ssid.text = _ssid;
+                              password.text = _password;
+                            }
+                          },
+                          child: const Text('Setup steps')),
+                      // Every release (the changelog is this build's).
+                      TextButton(onPressed: () => showWhatsNew(context, kChangelog), child: const Text("What's new")),
+                      if (_update case final u?)
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, 'update'),
+                          child: Text('Update to ${u.version}'),
+                        ),
+                      TextButton(onPressed: () => Navigator.pop(ctx, 'diag'), child: const Text('Diagnostics')),
+                    ]),
+                  ),
+                ],
+              // The links, what the two icons stand for, then how to reach the Commander.
+              'connection' => [
+                  back(redraw, 'Connection'),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ListenableBuilder(
+                      listenable: _obd,
+                      builder: (context, _) => Text(
+                          _obd.wifiLive
+                              ? 'WiFi: live, ${_obd.speedHz} speed frames/s (the car sends about 50), ${_obd.frameHz} frames/s in all, from $_host:$_port'
+                              : 'WiFi: ${_obd.status}',
+                          style: status),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ListenableBuilder(
+                      listenable: _bt,
+                      builder: (context, _) => Text(
+                          _bt.ready
+                              ? 'Bluetooth: connected. Car data: ${_bt.pushInfo}, ${_bt.pushCount} pushes. ${_bt.carLink}.'
+                              : 'Bluetooth: ${_bt.status}',
+                          style: status),
+                    ),
+                  ),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: ssid,
+                        decoration: const InputDecoration(labelText: 'WiFi name'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: password,
+                        decoration: const InputDecoration(labelText: 'WiFi password'),
+                      ),
+                    ),
+                  ]),
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: host,
+                        decoration: const InputDecoration(labelText: 'Host'),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: port,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(labelText: 'Port'),
+                      ),
+                    ),
+                  ]),
+                  // Bluetooth sticks to the Commander it was approved on; this lets
+                  // it pair with a replacement.
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                        onPressed: () => Navigator.pop(ctx, 'forget'), child: const Text('Find another Commander')),
+                  ),
+                ],
+              // What it is and how it shows.
+              'car' => [
+                  back(redraw, 'Car'),
+                  // The car as picked: its pictures again to change it.
+                  Row(children: [
+                    const Expanded(child: Text('Car')),
+                    TextButton.icon(
+                      onPressed: () async {
+                        await _askCar(must: false);
+                        redraw(() {});
+                      },
+                      icon: const Icon(Icons.chevron_right),
+                      iconAlignment: IconAlignment.end,
+                      label: Text(_obd.car.label),
+                    ),
+                  ]),
+                  toggle('Basic layout (bigger text, swipe the side cards)', _basic, _setBasic, redraw),
+                  // Gliding on every change keeps the screen redrawing at its full
+                  // rate: a third of the app's CPU in a replayed drive. Off, small
+                  // changes land at once and only jumps glide.
+                  toggle('Smooth power ring (more battery)', _smooth, (v) => _smooth = v, redraw, key: 'smoothRing'),
+                  // The figures few glance at: off, the rows go, the rest closes up.
+                  toggle('Show 12 V, other power and cell imbalance', _minor, (v) => _minor = v, redraw, key: 'minorFigures'),
+                ],
+              // The tuning few need.
+              _ => [
+                  back(redraw, 'Advanced'),
+                    // Off, every id streams: doors and belts live, but more frames for
+                    // the Commander to drop, speed's among them.
+                    toggle('Sparse polling (steadier speed, slower doors and belts)', _sparse,
+                        (v) => _obd.sparse = _sparse = v, redraw, key: 'sparsePolling'),
+                    // Bluetooth never starts a link while WiFi is mid-try. This holds it
+                    // back until the WiFi stream runs, however long: for a Commander
+                    // that drops its WiFi when Bluetooth comes first. With no WiFi
+                    // stream (ScanMyTesla off) there is then no Bluetooth either. It also
+                    // takes the time limit off WiFi's look for the network.
+                    toggle('Bluetooth waits for the WiFi stream, no time limit', _wifiFirst, (v) {
+                      _wifiFirst = v;
+                      _applyLook();
+                      _obd.relook(); // a look in progress takes the new limit now
+                    }, redraw, key: 'btWifiFirst'),
+                    // How long the look for the network waits for the phone's scan, at
+                    // most: it answers on the first results that hold the network. Not
+                    // below 1 s, which only reads the scan before (a miss, or a stale
+                    // yes). None with the switch on: the look then has no limit, as
+                    // Bluetooth has none. Android only: iOS joins in Settings.
+                    if (defaultTargetPlatform == TargetPlatform.android && !_wifiFirst)
+                      gap('WiFi scan time', _lookMs, 10, 'wifiLookMs',
+                          (v) { _lookMs = v; _applyLook(); }, redraw, min: 1),
+                    // Bluetooth stays off the Commander while its WiFi stream starts:
+                    // the dash has no buttons for that spell, shorter if these hold.
+                    gap('Bluetooth off before WiFi starts', _settleMs, 5, 'btSettleMs',
+                        (v) => _settleMs = v, redraw),
+                    // Two waits, the buttons then the data; one with the switch on
+                    // (see [_startMs]).
+                    if (!_wifiFirst)
+                      gap('Bluetooth buttons after WiFi is live', _buttonsMs, 10, 'btButtonsMs',
+                          (v) => _buttonsMs = v, redraw),
+                    gap(_wifiFirst ? 'Bluetooth after WiFi is live' : 'Bluetooth data after WiFi is live',
+                        _rejoinMs, 10, 'btRejoinMs', (v) => _rejoinMs = v, redraw),
+                    // With the switch on Bluetooth waits for the stream however long,
+                    // so this fallback has nothing to time.
+                    gap('Bluetooth back if no WiFi stream', _backMs, 30, 'btBackMs',
+                        (v) => _backMs = v, redraw, on: !_wifiFirst),
+                ],
+            })),
           ),
         ),
-        actions: [
-          // Bluetooth sticks to the Commander it was approved on; this lets
-          // it pair with a replacement.
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'forget'),
-            child: const Text('Find another Commander'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'diag'),
-            child: const Text('Diagnostics'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, null),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'save'),
-            child: const Text('Reconnect'),
-          ),
-        ],
-      )),
+        // Everything else applies as it is changed: only the connection's
+        // fields wait for Reconnect, which also starts the link over.
+        actions: page == 'connection'
+            ? [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, 'cancel'),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(ctx, 'save'),
+                  child: const Text('Reconnect'),
+                ),
+              ]
+            : [FilledButton(onPressed: () => Navigator.pop(ctx, 'done'), child: const Text('Done'))],
+      ))),
     );
     Future<void>.delayed(const Duration(milliseconds: 500), scroll.dispose); // after the exit animation
     if (!mounted) return;
@@ -1081,10 +1172,17 @@ class _DashPageState extends State<DashPage> {
       await _bt.forget();
       return;
     }
-    if (action != 'save') return;
+    if (action == 'update') {
+      _installUpdate(); // the connection's fields as they were: an update is not a reconnect
+      return;
+    }
+    // Done, or leaving (back, a tap outside), after the connection's fields
+    // were changed: those are kept too. Only Cancel drops them.
+    final edited = (ssid.text, password.text, host.text.trim(), port.text.trim()) != (_ssid, _password, _host, '$_port');
+    if (action != 'save' && !((action == 'done' || action == null) && edited)) return;
     final prefs = await SharedPreferences.getInstance();
     _host = host.text.trim();
-    _port = int.tryParse(port.text.trim()) ?? kDefaultPort;
+    _port = int.tryParse(port.text.trim()) ?? _port; // half typed or cleared: the one it had
     await prefs.setString('host', _host);
     await prefs.setInt('port', _port);
     await _saveWifi(ssid.text, password.text);

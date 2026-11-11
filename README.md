@@ -4,8 +4,8 @@ A landscape driver's display for a phone mounted behind the wheel of a
 Tesla Model Y, fed by an Enhauto **S3XY Commander** or any Panda-protocol
 OBD WiFi adapter ([without a Commander](#without-a-commander)). Built for the Model Y
 Juniper (2025 on), 5 or 7 seats, rear- or all-wheel drive; tested on a
-7-seater. The Model 3 (2024 on) can be picked too, with its own picture and
-lights; not yet tried in one. Flutter; Android first, iOS works too.
+7-seater. The Model 3 (2024 on) and the 6-seat Model Y L can be picked too,
+each with its own picture and lights; not yet tried in either. Flutter; Android first, iOS works too.
 
 ![The dash on a cold morning: signalling right, ice on the road, a cold pack capping regen, a third-row seat unbuckled](docs/screenshots/cold-morning.png)
 
@@ -37,8 +37,8 @@ It shows:
 - the route along the bottom: time to go and arrival time, the energy
   and range it uses, and battery and range at arrival (plus its length and
   the destination when the Commander has them);
-- the car from above (a Model Y with 5 or 7 seats or a Model 3, as picked
-  at the first launch): tyre pressures on the wheels, and on the seats each row's
+- the car from above (a Model Y with 5 or 7 seats, a Model Y L or a Model 3,
+  as picked at the first launch): tyre pressures on the wheels, and on the seats each row's
   temperature, the front and second rows' fans (Auto's level
   when on Auto), buckled belts in green and a taken seat left unbuckled in
   red;
@@ -148,8 +148,8 @@ and the recirculation state. Only tested with the Commander so far.
    `S3XY_OBD` network (password `12345678`). Skip this step to run on
    Bluetooth only, and turn off **Bluetooth waits for the WiFi stream** in
    the settings (on by default, it holds Bluetooth until the stream runs).
-2. Open the dash. The first launch asks which car (Model 3, or Model Y
-   with 5 or 7 seats, and a 5-seater's drive), then shows these steps, step 1 with the S3XY
+2. Open the dash. The first launch asks which car (Model 3, Model Y with
+   5 or 7 seats, or Model Y L, and a 5-seater's drive), then shows these steps, step 1 with the S3XY
    app's own screens, before the phone asks for its permissions.
    - Android joins `S3XY_OBD` itself (approve the system dialog once) and
      keeps mobile data for everything else.
@@ -182,10 +182,10 @@ flutter build apk --release --target-platform android-arm64  # phones only, smal
 flutter build ios --simulator --debug
 ```
 
-Every push to master builds the APKs on GitHub Actions
+A version tag (`v1.0.0`) builds the APKs on GitHub Actions
 (`.github/workflows/apk.yml`), after analyze and the tests, and publishes
-them as a pre-release (`build-N`); a version tag (`v1.0.0`) publishes a
-full release. Each has `Wattline-Android.apk` for most phones (64-bit
+them as a release; running the workflow by hand builds them without one
+(the run's artifacts). Each has `Wattline-Android.apk` for most phones (64-bit
 ARM), `Wattline-Android-older-phones.apk` for any phone. The tests and
 the two builds run side by side. Release builds are signed with the debug
 key: store the Mac's
