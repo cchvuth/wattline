@@ -1486,7 +1486,7 @@ class _DashPageState extends State<DashPage> {
                                   Padding(
                                     padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
                                     child: Builder(builder: (context) {
-                                      final shown = o.wifiLive && o.gear != 'P' && (o.gLong != null || o.gLat != null);
+                                      final shown = o.wifiLive && (o.gLong != null || o.gLat != null); // in P too: the last drive's peak
                                       return Visibility.maintain(visible: shown, child: _GBall(obd: o, listen: shown));
                                     }),
                                   ),
