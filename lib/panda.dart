@@ -539,6 +539,9 @@ class Panda extends ChangeNotifier {
   String get speedUnit => kph ? 'km/h' : 'mph';
   String get rangeUnit => kph ? 'km' : 'mi';
 
+  /// A temperature as shown: °F once the car is in mph, else °C as read.
+  double temp(double c) => kph ? c : c * 1.8 + 32;
+
   String status = 'disconnected';
   WifiLink _link = WifiLink.idle;
 

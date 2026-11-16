@@ -22,6 +22,14 @@ Uint8List record(int id, List<int> data, {int bus = 0}) {
 }
 
 void main() {
+  test('temperatures in °F once the car is in mph', () {
+    final p = Panda();
+    expect(p.temp(20), 20);
+    p.kph = false;
+    expect(p.temp(20), 68);
+    expect(p.temp(-40), -40);
+  });
+
   test('panda records unpack into frames by id and bus', () {
     final p = Panda()
       ..onPacket(Uint8List.fromList([

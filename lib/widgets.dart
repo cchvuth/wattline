@@ -537,7 +537,7 @@ class _Outside extends StatelessWidget {
       height: rowHeight,
       child: Align(
         alignment: Alignment.centerRight,
-        child: Text(c == null ? '—' : _deg(c),
+        child: Text(c == null ? '—' : _deg(obd.temp(c)),
             style: TextStyle(
                 fontSize: 16,
                 color: _airColor(c),
@@ -1386,9 +1386,9 @@ class _Battery extends StatelessWidget {
                   if (cold) const Icon(Icons.ac_unit, size: 14, color: kCold),
                   if (t != null)
                     Text.rich(
-                        TextSpan(text: '${t.abs() < 10 ? (t.abs() < 0.05 ? 0.0 : t).toStringAsFixed(1) : t.round()}°', children: [
+                        TextSpan(text: _packDeg(o.temp(t)), children: [
                           if (o.precondC case final to?)
-                            TextSpan(text: ' → ${_deg(to)}', style: const TextStyle(color: kWarn)),
+                            TextSpan(text: ' → ${_deg(o.temp(to))}', style: const TextStyle(color: kWarn)),
                         ]),
                         style: TextStyle(
                             fontSize: 14,
@@ -1650,7 +1650,9 @@ class _BrakeTemps extends StatelessWidget {
         SizedBox(
           width: width,
           height: height,
-          child: CustomPaint(painter: _BrakeCross([...obd.brakeTempC], MediaQuery.textScalerOf(context))),
+          child: CustomPaint(
+              painter: _BrakeCross([for (final c in obd.brakeTempC) c == null ? null : obd.temp(c)],
+                  MediaQuery.textScalerOf(context))),
         ),
       ]);
 }
@@ -1730,6 +1732,9 @@ class _Pack extends StatelessWidget {
 
 /// A temperature in whole degrees, the degree sign against the number.
 String _deg(double c) => '${c.round()}°';
+
+/// The pack's temperature: a tenth under 10°, whole above.
+String _packDeg(double t) => '${t.abs() < 10 ? (t.abs() < 0.05 ? 0.0 : t).toStringAsFixed(1) : t.round()}°';
 
 /// The air outside's colour: ice blue from +3 °C down, where bridges freeze first.
 Color _airColor(double? c, [Color other = Colors.white]) => c != null && c.round() <= 3 ? kCold : other;
@@ -2347,7 +2352,7 @@ class _Cabin extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(6)),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Text(_deg(c),
+                  Text(_deg(o.temp(c)),
                       style: TextStyle(fontSize: temp, height: 1.1, fontWeight: FontWeight.w600, color: Colors.white)),
                   if (fan != null)
                     Row(mainAxisSize: MainAxisSize.min, children: [

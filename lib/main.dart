@@ -1576,7 +1576,7 @@ class _Compact extends StatelessWidget {
                   if (o.outsideC case final c?)
                     Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 6),
-                        child: Text(_deg(c),
+                        child: Text(_deg(o.temp(c)),
                             style: TextStyle(fontSize: 18, color: _airColor(c, Colors.white70)))),
                   if (o.wifiLive)
                     Opacity(
