@@ -2322,7 +2322,7 @@ class _Cabin extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(bar == null ? '—' : (bar * 14.5038).round().toString(),
+              Text(bar == null ? '—' : o.psi ? (bar * 14.5038).round().toString() : bar.toStringAsFixed(1),
                   style: TextStyle(
                       color: Colors.white,
                       fontSize: 14 * f,
@@ -2330,7 +2330,7 @@ class _Cabin extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                       fontFeatures: const [FontFeature.tabularFigures()],
                       shadows: const [Shadow(blurRadius: 3)])),
-              Text('psi',
+              Text(o.psi ? 'psi' : 'bar',
                   style: TextStyle(color: Colors.white60, fontSize: 9 * f, height: 1, shadows: const [Shadow(blurRadius: 3)])),
             ]),
           ),

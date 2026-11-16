@@ -174,6 +174,13 @@ class _DashPageState extends State<DashPage> {
     _cardRight = (prefs.getInt('cardRight') ?? _cardRight).clamp(0, kBasicCards.length - 1);
     _ringPage = (prefs.getInt('ringPage') ?? _ringPage).clamp(0, 1); // the power ring or the speedometer
     _sparse = prefs.getBool('sparsePolling') ?? _sparse;
+    // The units, each the owner's once switched; none saved: the car's speed
+    // unit, temperatures with it, tyres in psi.
+    _obd
+      ..kmPick = switch (prefs.getBool('unitMiles')) { final m? => !m, _ => null }
+      ..fahrenheitPick = prefs.getBool('unitF')
+      ..psiPick = prefs.getBool('unitPsi')
+      ..carKph = prefs.getBool('carKph');
     _obd.sparse = _sparse;
     // None saved (the first launch), or one this build does not know: asked
     // below.
@@ -194,6 +201,7 @@ class _DashPageState extends State<DashPage> {
         ..tpRR ??= v[3];
     }
     _tyres = [_obd.tpFL, _obd.tpFR, _obd.tpRL, _obd.tpRR];
+    _carKph = _obd.carKph;
     if (!mounted) return; // closed while loading: nothing to listen for
     setState(() {});
     // The first launch's pages until all are through: closed midway (the
@@ -379,10 +387,15 @@ class _DashPageState extends State<DashPage> {
 
   AppLifecycleListener? _life;
   List<double?> _tyres = const [null, null, null, null];
+  bool? _carKph;
 
   /// Keeps new pressures for the next start (see [_load]).
   void _saveTyres() {
     final o = _obd, t = [o.tpFL, o.tpFR, o.tpRL, o.tpRR];
+    if (o.carKph case final k? when k != _carKph) { // the car's own unit, for Bluetooth alone next time
+      _carKph = k;
+      SharedPreferences.getInstance().then((p) => p.setBool('carKph', k));
+    }
     if (listEquals(t, _tyres)) return;
     _tyres = t;
     SharedPreferences.getInstance()
@@ -1098,6 +1111,11 @@ class _DashPageState extends State<DashPage> {
                   toggle('Smooth power ring (more battery)', _smooth, (v) => _smooth = v, redraw, key: 'smoothRing'),
                   // The figures few glance at: off, the rows go, the rest closes up.
                   toggle('Show 12 V, other power and cell imbalance', _minor, (v) => _minor = v, redraw, key: 'minorFigures'),
+                  // Each as the car's settings have it; untouched, the car's speed
+                  // unit, temperatures with it, tyres in psi.
+                  toggle('Distance and speed in miles (mph)', !_obd.kph, (v) => _obd.kmPick = !v, redraw, key: 'unitMiles'),
+                  toggle('Temperature in °F', _obd.fahrenheit, (v) => _obd.fahrenheitPick = v, redraw, key: 'unitF'),
+                  toggle('Tyre pressure in psi', _obd.psi, (v) => _obd.psiPick = v, redraw, key: 'unitPsi'),
                 ],
               // The tuning few need.
               _ => [

@@ -33,7 +33,7 @@ enum WifiLink {
 class Panda extends ChangeNotifier {
   static const _net = MethodChannel('tesla_dash/net');
 
-  double speed = 0; // in the car's display units
+  double speed = 0; // in the display's unit ([kph])
   double? frontKw;
   double? rearKw;
 
@@ -148,7 +148,46 @@ class Panda extends ChangeNotifier {
   double? rangeMi;
   double? speedLimit;
   bool braking = false;
+  /// The display's unit for speed and distance: the owner's pick ([kmPick]),
+  /// else the car's own (DI_uiSpeedUnits). Speeds read in the car's unit
+  /// are turned into it as they come.
   bool kph = true;
+  bool? _carKph; // the car's own unit: null until WiFi says (or remembered from it, [carKph])
+  bool? _kmPick, fahrenheitPick, psiPick; // the owner's units; null: as before (the car's, with mph, psi)
+  bool? get kmPick => _kmPick;
+  set kmPick(bool? v) {
+    _kmPick = v;
+    _shown();
+  }
+
+  /// The car's own unit as WiFi last said it, kept for the next start: an mph
+  /// car on Bluetooth alone is then still known as one.
+  bool? get carKph => _carKph;
+  set carKph(bool? v) {
+    _carKph = v;
+    _shown();
+  }
+
+  // The display's unit from the pick, else the car's; speeds already in hand
+  // turned with it (a Bluetooth value only comes again when it changes).
+  void _shown() {
+    final was = kph;
+    kph = _kmPick ?? _carKph ?? true;
+    if (kph == was) return;
+    double turn(double v) => kph ? v * 1.609344 : v / 1.609344;
+    speed = turn(speed);
+    if (speedLimit case final l?) speedLimit = turn(l);
+  }
+
+  /// Temperatures in °F: the owner's pick, else with mph.
+  bool get fahrenheit => fahrenheitPick ?? !kph;
+
+  /// Tyre pressures in psi: the owner's pick, else psi.
+  bool get psi => psiPick ?? true;
+
+  // A speed in the car's display unit, in the display's; while the car's
+  // unit is unknown, taken as the display's.
+  double _fromCar(double v) => _carKph == null || _carKph == kph ? v : _carKph! ? v / 1.609344 : v * 1.609344;
   String? recirc;
   String? autopilot;
   bool indL = false, indR = false; // signalling, whichever the phase
@@ -381,7 +420,7 @@ class Panda extends ChangeNotifier {
     // The car's display unit, as on its screen; 511 is SNA. ponytail: the
     // unit is WiFi's last (km/h until it has one); keep kph if an mph car
     // ever starts without WiFi.
-    if (at(61) case final v? when v < 511) speed = v.toDouble();
+    if (at(61) case final v? when v < 511) speed = _fromCar(v.toDouble());
     if (at(62) case final v? when v != 255) pedalPct = (v * 0.4).clamp(0, 100).toDouble();
     if (at(66) case final v?) gear = kGears[v] ?? '—';
     // 1 is ON; 2 INVALID (all that 0x118's old brake bits read since 2026.38,
@@ -397,7 +436,7 @@ class Panda extends ChangeNotifier {
     _btMotors(kw(51), kw(53));
     if (at(111) case final v?) socPct = v.clamp(0, 100).toDouble();
     if (at(112) case final v?) rangeMi = v.toDouble(); // miles, always
-    if (at(110) case final v?) speedLimit = v == 0 || v >= 155 ? null : v.toDouble();
+    if (at(110) case final v?) speedLimit = v == 0 || v >= 155 ? null : _fromCar(v.toDouble());
     // The Commander's own code, not the bus's DAS_autopilotState: 1 cruise
     // (TACC), 2 and 3 steering. Lit, as on WiFi, only while it steers.
     if (at(105) case final v?) autopilot = switch (v) { 1 => 'TACC', 2 || 3 => 'AUTOPILOT', _ => null };
@@ -539,8 +578,8 @@ class Panda extends ChangeNotifier {
   String get speedUnit => kph ? 'km/h' : 'mph';
   String get rangeUnit => kph ? 'km' : 'mi';
 
-  /// A temperature as shown: °F once the car is in mph, else °C as read.
-  double temp(double c) => kph ? c : c * 1.8 + 32;
+  /// A temperature as shown: °F or °C as read ([fahrenheit]).
+  double temp(double c) => fahrenheit ? c * 1.8 + 32 : c;
 
   String status = 'disconnected';
   WifiLink _link = WifiLink.idle;
@@ -1348,9 +1387,9 @@ class Panda extends ChangeNotifier {
       if (v == null) continue;
       switch (e.key) {
         case 'speed':
-          speed = v;
+          speed = _fromCar(v);
         case 'speedIsKph':
-          kph = v == 1;
+          carKph = v == 1;
         case 'pedal':
           pedalPct = v.clamp(0, 100);
         case 'brake':
@@ -1553,7 +1592,7 @@ class Panda extends ChangeNotifier {
         case 'domeLight':
           domeLight = kDome[v.round()];
         case 'speedLimit':
-          speedLimit = v == 0 || v >= 155 ? null : v; // raw 0 unknown, 31 none
+          speedLimit = v == 0 || v >= 155 ? null : _fromCar(v); // raw 0 unknown, 31 none
         case 'outside':
           outsideC = v;
         case 'washer':

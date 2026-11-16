@@ -30,6 +30,28 @@ void main() {
     expect(p.temp(-40), -40);
   });
 
+  test("the owner's units: miles turn the car's km/h speeds, °F and bar on their own", () {
+    final u = Panda()..kmPick = false; // the car's own unit unknown (Bluetooth alone, never on WiFi): as shown
+    u.fromBt({61: 62});
+    expect((u.speed, u.speedUnit), (62.0, 'mph'));
+    final p = Panda()
+      ..carKph = true // a km/h car (WiFi said so, or remembered)
+      ..kmPick = false; // shown in mph
+    p.fromBt({61: 100, 110: 80});
+    expect(p.speed, closeTo(62.137, 1e-3));
+    expect(p.speedLimit, closeTo(49.710, 1e-3));
+    p.kmPick = true; // switched back, parked: what Bluetooth gave turns with it (it comes again only on a change)
+    expect(p.speedLimit, closeTo(80, 1e-9));
+    p.kmPick = false;
+    expect((p.speedUnit, p.fahrenheit, p.psi), ('mph', true, true)); // °F with mph until picked
+    p
+      ..fahrenheitPick = false
+      ..psiPick = false
+      ..kmPick = null; // back to the car's
+    p.fromBt({61: 100});
+    expect((p.speed, p.speedUnit, p.temp(20), p.psi), (100.0, 'km/h', 20.0, false));
+  });
+
   test('panda records unpack into frames by id and bus', () {
     final p = Panda()
       ..onPacket(Uint8List.fromList([
