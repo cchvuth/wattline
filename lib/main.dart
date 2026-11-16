@@ -1292,6 +1292,20 @@ class _DashPageState extends State<DashPage> {
         final side = max(0.0, min(box.maxWidth, box.maxHeight - 96));
         return Stack(alignment: Alignment.center, clipBehavior: Clip.none, children: [
           if (o.wifiLive) _GBall(obd: o, dial: side),
+          // Bluetooth alone, no g: the brakes' temperatures and the Dash's
+          // labelled pedal in its place, clear of the lamps above. Not on a
+          // rear-motor car: as it was.
+          if (o.viaBt && !o.car.rwd)
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                if (o.brakeTempC.any((c) => c != null)) _BrakeTemps(obd: o, width: min(side, 230), height: 120),
+                if (o.gear != 'P') ...[
+                  const SizedBox(height: 22),
+                  _PedalBar(obd: o, width: side),
+                ],
+              ]),
+            ),
           Positioned(left: 0, right: 0, bottom: box.maxHeight / 2 + side / 2 + 4, child: _Lights(obd: o)),
         ]);
       })),
@@ -1424,6 +1438,30 @@ class _DashPageState extends State<DashPage> {
                         Expanded(
                           child: o.wifiLive && o.charging
                               ? _SideColumn(children: [_Battery(obd: o), _Charge(obd: o), _figures(o)])
+                              // Bluetooth alone (no g-meter): under the figures the Dash's labelled
+                              // pedal and the brakes' temperatures, in the room left. Not on a
+                              // rear-motor car: as it was.
+                              : o.viaBt && !o.car.rwd
+                              ? Column(children: [
+                                  Padding(padding: const EdgeInsets.fromLTRB(8, 14, 8, 0), child: _Battery(obd: o)),
+                                  Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: FittedBox(fit: BoxFit.scaleDown, child: _figures(o))),
+                                  Expanded(
+                                    child: Center(
+                                      child: FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                                          if (o.gear != 'P') _PedalBar(obd: o, width: 150),
+                                          if (o.gear != 'P' && o.brakeTempC.any((c) => c != null))
+                                            const SizedBox(height: 16),
+                                          if (o.brakeTempC.any((c) => c != null))
+                                            _BrakeTemps(obd: o, width: 140, height: 76),
+                                        ]),
+                                      ),
+                                    ),
+                                  ),
+                                ])
                               : Column(children: [
                                   Padding(padding: const EdgeInsets.fromLTRB(8, 14, 8, 0), child: _Battery(obd: o)),
                                   Expanded(child: _SideColumn(children: [_figures(o)])),

@@ -297,11 +297,13 @@ final _shots = <String, (Size, Panda Function())>{
     ..socPct = 58
     ..rangeMi = 175),
   // ScanMyTesla off: the Commander's Bluetooth alone; what only WiFi has
-  // must not show.
+  // (seats, fans) must not show.
   'bluetooth-only': (const Size(823.5, 384), () => Panda()
     ..kph = true
     ..fromBt({61: 72, 66: 4, 51: 30, 53: 50, 111: 58, 112: 175, 110: 70, 81: 0x11,
-        80: 0x11, 105: 3, 35: 4088, 36: 2531, 37: 368, 34: 840, 43: 1951, 44: 1949})),
+        80: 0x11, 105: 3, 35: 4088, 36: 2531, 37: 368, 34: 840, 43: 1951, 44: 1949,
+        132: 2900, 133: 2875, 134: 2950, 135: 2925, 159: 442, // tyres, cabin 22.1 °C
+        125: 172, 126: 168, 127: 104, 128: 100})), // brakes 86, 84, 52, 50 °C
 };
 
 /// The Commander's own figures, where a scene has them: with ScanMyTesla off
@@ -354,6 +356,61 @@ void main() {
       await t.pumpWidget(const SizedBox());
     });
   }
+
+  // The basic layout with the Commander's Bluetooth alone: each card as it
+  // shows then (the car with its tyres and the front row's air, the pedal
+  // bar where the g-meter was).
+  testWidgets('basic layout on Bluetooth only', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    t.view
+      ..physicalSize = const Size(823.5, 384) * _dpr
+      ..devicePixelRatio = _dpr;
+    final (_, car) = _shots['bluetooth-only']!;
+    final o = car()..fromBt({62: 80}); // the pedal at 32 %
+    final key = GlobalKey();
+    await t.pumpWidget(MaterialApp(
+        theme: kTheme,
+        debugShowCheckedModeBanner: false,
+        home: RepaintBoundary(key: key, child: DashPage(demo: o, basic: true, bt: _bts['bluetooth-only']!()))));
+    await t.pump(const Duration(milliseconds: 300));
+    Future<void> settle() async {
+      await t.runAsync(() => Future.wait([
+            for (final e in find.byType(Image).evaluate()) precacheImage((e.widget as Image).image, e),
+          ]));
+      await t.pump();
+    }
+
+    Future<void> shot(String name) async {
+      final out = Platform.environment['DASH_SHOT'];
+      if (out == null) return;
+      await t.runAsync(() async {
+        final img = await (key.currentContext!.findRenderObject() as RenderRepaintBoundary).toImage(pixelRatio: _dpr);
+        final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+        File('$out/$name.png').writeAsBytesSync(bytes!.buffer.asUint8List());
+      });
+    }
+
+    await settle();
+    final left = find.byType(PageView).first, right = find.byType(PageView).last;
+    await shot('basic-bt-1'); // energy, the buttons
+    await t.drag(left, const Offset(0, -300));
+    await t.pumpAndSettle();
+    await t.drag(right, const Offset(0, -300));
+    await t.pumpAndSettle();
+    await settle();
+    expect(find.text('PEDAL'), findsNothing); // a TextSpan: by its rich text below
+    expect(find.textContaining('PEDAL', findRichText: true), findsOneWidget);
+    expect(find.text('BRAKES'), findsOneWidget);
+    expect(find.byWidgetPredicate((w) => w is CustomPaint && w.painter.runtimeType.toString() == '_BrakeCross'),
+        findsOneWidget); // the four figures on the brake cross
+    await shot('basic-bt-2'); // the drive card, the route
+    await t.drag(left, const Offset(0, -300));
+    await t.pumpAndSettle();
+    await settle();
+    expect(find.image(const AssetImage('assets/car/car.png')), findsWidgets);
+    await shot('basic-bt-3'); // the car
+    await t.pumpWidget(const SizedBox());
+  });
 
   // The basic layout: the ring between two stacks of cards, one card of
   // each showing; a swipe up brings the next. DASH_SHOT writes both views.

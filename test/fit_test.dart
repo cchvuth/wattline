@@ -595,21 +595,24 @@ void main() {
     await t.pumpWidget(const SizedBox());
   });
 
-  // ScanMyTesla off: the Commander's Bluetooth data alone, and what only
-  // WiFi has (the car: tyres, seats, cabin) gone from the column.
+  // ScanMyTesla off: the Commander's Bluetooth data alone. The car stays,
+  // with what Bluetooth carries (its lights, the tyres, the front row's air),
+  // and none of what only WiFi has (seats, fans).
   testWidgets('Dash on Bluetooth only', (t) async {
     t.view.physicalSize = const Size(823, 384);
     final o = Panda()
       ..fromBt({61: 74, 66: 4, 51: 96, 53: 192, 111: 59, 112: 192, 105: 3, 81: 0x11,
-          35: 4088, 36: 2531, 37: 368, 34: 800, 43: 1950, 44: 1948});
+          35: 4088, 36: 2531, 37: 368, 34: 800, 43: 1950, 44: 1948, 132: 2900, 159: 431});
     await t.pumpWidget(MaterialApp(theme: kTheme, home: DashPage(demo: o, bt: Commander())));
     await _frames(t);
     expect(find.text('74'), findsOneWidget);
-    // Autosteer on: the wheel on blue, beside the battery as there is no car
-    // picture to put it by; its words on a long press.
+    // Autosteer on: the wheel on blue; its words on a long press.
     expect(find.byTooltip('AUTOPILOT'), findsOneWidget);
     expect(find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyph.autopilot), findsOneWidget);
-    expect(find.image(const AssetImage('assets/car/car.png')), findsNothing);
+    expect(find.image(const AssetImage('assets/car/car.png')), findsWidgets);
+    expect(find.text('42'), findsOneWidget); // 2.9 bar, front left
+    expect(find.textContaining('-22'), findsOneWidget); // the cabin, -21.6 °C
+    expect(find.byWidgetPredicate((w) => w is GlyphIcon && w.glyph == Glyph.fan), findsNothing);
     await t.pumpWidget(const SizedBox());
   });
 

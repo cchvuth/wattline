@@ -12,6 +12,16 @@ typedef Change = ({String version, String title, List<String> notes, List<String
 
 const kChangelog = <Change>[
   (
+    version: '1.4.0',
+    title: 'More over Bluetooth',
+    notes: [
+      "On Bluetooth alone: the tyre pressures and the cabin's temperature on the car picture, once the Commander's firmware sends them",
+      'On Bluetooth alone, all-wheel drive: the four brakes\' temperatures and the pedal in the g-meter\'s place',
+      'Bug fixes and improvements',
+    ],
+    shots: ['bluetooth.jpg'],
+  ),
+  (
     version: '1.3.0',
     title: 'Model Y L',
     notes: [

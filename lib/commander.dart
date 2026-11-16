@@ -534,6 +534,10 @@ class Commander extends ChangeNotifier {
   static const _wifiLacks = [6, 7, 8, 9, 101];
   static const _allFields = [..._wifiLacks, ...Panda.btFields, ...Panda.btTraceFields];
 
+  /// Fields only recent Commander firmware has (the tyres, the cabin): left
+  /// out again should a Commander refuse a subscription naming them.
+  static const _newer = [132, 133, 134, 135, 159];
+
   /// How much car data a session subscribes to: none (the buttons only),
   /// what WiFi lacks, or all of it. A subscription only adds, so a session
   /// takes more on the way and less only by dialling again.
@@ -552,8 +556,12 @@ class Commander extends ChangeNotifier {
       pushInfo = 'buttons only: car data once the WiFi stream has settled';
       return;
     }
-    final (_, st) = replyStatus(sec.crypt(await _rpc(
+    var (_, st) = replyStatus(sec.crypt(await _rpc(
         cmd, sec.crypt(subscribeRequest(level == _lean ? _wifiLacks : _allFields)))));
+    if (st != 0 && level == _full) {
+      (_, st) = replyStatus(sec.crypt(await _rpc(
+          cmd, sec.crypt(subscribeRequest([for (final f in _allFields) if (!_newer.contains(f)) f])))));
+    }
     pushInfo = 'subscribed${level == _full ? '' : _wifiLive ? ' to the route and recirculation only (WiFi is live)' : ' to the route and recirculation only (WiFi was, just now)'}, '
         '${st < _statuses.length ? _statuses[st] : 'status $st'}';
     // The Commander pushes a field when it changes: a route set before we

@@ -362,6 +362,18 @@ void main() {
     expect((p.live, p.gear, p.doorFL, p.frontKw), (false, '—', false, null));
   });
 
+  test("Bluetooth's tyres and cabin: millibar, 0.1 °C zigzagged, only once pushed", () {
+    final p = Panda();
+    p.fromBt({61: 0, 132: 2900, 133: 2875, 134: 0, 135: 6400});
+    expect((p.tpFL, p.tpFR, p.tpRL, p.tpRR), (2.9, 2.875, null, null)); // 0 no reading, past 6.3 bar dropped
+    expect((p.btHas(159), p.cabinC1), (false, null));
+    p.fromBt({159: 431}); // zigzag 431 = -216: -21.6 °C
+    expect(p.btHas(159), isTrue);
+    expect(p.cabinC1, closeTo(-21.6, 1e-9));
+    p.fromBt({159: 450});
+    expect(p.cabinC1, closeTo(22.5, 1e-9));
+  });
+
   test('the newer stats decode a capture from the car as the catalog says', () {
     final p = Panda()..kph = true;
     // One frame of each as the car sent them: parked, plugged

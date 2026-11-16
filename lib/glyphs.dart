@@ -319,3 +319,27 @@ final _drlFills = [
   Path()..moveTo(7.36, 15.95)..cubicTo(7.36, 16.37, 7.01, 16.72, 6.59, 16.72)..cubicTo(6.16, 16.72, 5.82, 16.37, 5.82, 15.95)..cubicTo(5.82, 15.52, 6.16, 15.18, 6.59, 15.18)..cubicTo(7.01, 15.18, 7.36, 15.52, 7.36, 15.95)..close(),
   Path()..moveTo(4.61, 15.95)..cubicTo(4.61, 16.28, 4.34, 16.56, 4, 16.56)..cubicTo(3.66, 16.56, 3.39, 16.28, 3.39, 15.95)..cubicTo(3.39, 15.61, 3.66, 15.34, 4, 15.34)..cubicTo(4.34, 15.34, 4.61, 15.61, 4.61, 15.95)..close(),
 ];
+
+/// A disc brake, drawn for the dash: the disc (drilled, its hub and bore
+/// open) and the caliper over its top, a gap between them; filled (even-odd),
+/// on a 102-unit square centred on 0,0. dash-native draws the same shape.
+final kDiscBrake = () {
+  const c = Offset(0, 6), a0 = -135 * pi / 180, sweep = 90 * pi / 180; // the caliper: 90° over the top
+  Rect at(double r, [Offset o = c]) => Rect.fromCircle(center: o, radius: r);
+  Offset on(double r, double a) => c + Offset(cos(a), sin(a)) * r;
+  final p = Path()
+    ..fillType = PathFillType.evenOdd
+    ..addOval(at(34)) // the disc
+    ..addOval(at(14)) // its centre open
+    ..addOval(at(9)) // the hub
+    ..addOval(at(3.5)); // its bore
+  for (var i = 0; i < 5; i++) {
+    p.addOval(at(3, on(24, -pi / 2 + i * 2 * pi / 5))); // the drilled holes
+  }
+  return p
+    ..arcTo(at(50), a0, sweep, true) // the caliper's back, its ends round
+    ..arcToPoint(on(38, a0 + sweep), radius: const Radius.circular(6))
+    ..arcTo(at(38), a0 + sweep, -sweep, false)
+    ..arcToPoint(on(50, a0), radius: const Radius.circular(6))
+    ..close();
+}();

@@ -243,6 +243,9 @@ class Panda extends ChangeNotifier {
   // The cabin, by row.
   int? co2ppm;
   double? cabinC1, cabinC2, cabinC3;
+  /// The brakes' estimated temperatures, °C, FL FR RL RR: Bluetooth's alone
+  /// (0x3FE on this car's stream is another, 2-byte frame).
+  final brakeTempC = List<double?>.filled(4, null);
   // Each row's fan as the screen sets it: OFF or its speed (1-10 in front,
   // LOW, MED or HIGH in the second row), or on Auto Auto's level (LOW, MED
   // or HIGH). The third row has none.
@@ -336,7 +339,11 @@ class Panda extends ChangeNotifier {
   /// The pushed fields [fromBt] reads, which the Commander subscribes to.
   static const btFields = [27, 32, 34, 35, 36, 37, 42, 43, 44, 49, 51, 53, 61, 62, 63, 64,
       65, 66, 80, 81, 82, 85, 105, 106, 107, 108, 110, 111, 112, 113, 114, 115, 116,
-      117, 118];
+      117, 118, 125, 126, 127, 128, 132, 133, 134, 135, 159];
+
+  /// The Commander pushed field [f] this session (its newer fields, such as
+  /// the cabin's 159, only come from recent firmware).
+  bool btHas(int f) => _bt?.containsKey(f) ?? false;
 
   /// Subscribed too, for the trace alone: the pack's and the 12 V side's volts
   /// and amps, to see whether they could stand in for motor power over
@@ -416,6 +423,16 @@ class Panda extends ChangeNotifier {
     if (z(42) case final v?) packTempC = v * 0.5; // the coldest cells, °C
     if (at(49) case final v?) packHeating = v == 1; // BPS_Active
     if (at(108) case final v?) handsOn = v == 15 ? null : v; // as 0x399's
+    // The car's tyre screen in millibar (0x25A's pressures); 0 is no reading.
+    double? bar(int f) => switch (at(f)) { final v? when v > 0 && v <= 6300 => v / 1000, _ => null };
+    if (bar(132) case final v?) tpFL = v;
+    if (bar(133) case final v?) tpFR = v;
+    if (bar(134) case final v?) tpRL = v;
+    if (bar(135) case final v?) tpRR = v;
+    if (z(159) case final v?) cabinC1 = v * 0.1; // the cabin, 0.1 °C
+    for (var i = 0; i < 4; i++) {
+      if (z(125 + i) case final v? when v > -40 && v < 1000) brakeTempC[i] = v.toDouble(); // whole °C
+    }
   }
 
   /// One line for the trace file (main's _traceTick): the link, what the
@@ -866,6 +883,7 @@ class Panda extends ChangeNotifier {
     trunk = frunk = mirrorDipped = tiltAuto = chargePort = mapLight = false;
     hvacOn = recircOn = false;
     _tp219.clear();
+    brakeTempC.fillRange(0, 4, null);
     doorFL = doorFR = doorRL = doorRR = false;
     beltDriver = beltPass = belt2L = belt2C = belt2R = belt3L = belt3R = false;
     buckled.clear();

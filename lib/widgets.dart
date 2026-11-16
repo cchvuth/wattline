@@ -1596,6 +1596,117 @@ Widget _statRow(BuildContext context, String label, String value, {Color color =
       Text(value, style: TextStyle(fontSize: 16, color: color, fontFeatures: const [FontFeature.tabularFigures()])),
     ]);
 
+/// The pedal as a labelled bar, the Dash's own (dash-native set_g): with
+/// Bluetooth alone, where no g-meter takes the place. Bluetooth has no brake
+/// pressure, so it is the accelerator alone.
+class _PedalBar extends StatelessWidget {
+  const _PedalBar({required this.obd, this.width = 72});
+
+  final Panda obd;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+        listenable: obd.fast,
+        builder: (context, _) {
+          final pct = obd.pedalPct;
+          return Column(mainAxisSize: MainAxisSize.min, children: [
+            Text.rich(
+                TextSpan(children: [
+                  const TextSpan(text: 'PEDAL', style: TextStyle(letterSpacing: 0.8)),
+                  TextSpan(text: pct == null ? ' —' : ' ${pct.round()} %'),
+                ]),
+                maxLines: 1,
+                style: const TextStyle(
+                    fontSize: 12, color: Colors.white70, fontFeatures: [FontFeature.tabularFigures()])),
+            const SizedBox(height: 3),
+            Container(
+              width: width,
+              height: 3,
+              alignment: Alignment.centerLeft,
+              color: Colors.white24,
+              child: FractionallySizedBox(
+                  widthFactor: (pct ?? 0).clamp(0, 100) / 100, child: Container(color: kAccent)),
+            ),
+          ]);
+        },
+      );
+}
+
+/// The brakes' four temperatures on the Dash's brake cross (dash-native
+/// tyres_draw): the axles and the spine, a disc brake at each corner
+/// (glyphs.dart kDiscBrake), its figure outside it. With Bluetooth alone, in the g-meter's place; not on a
+/// rear-motor car. No steering angle over Bluetooth: the fronts stay straight.
+class _BrakeTemps extends StatelessWidget {
+  const _BrakeTemps({required this.obd, this.width = 170, this.height = 90});
+
+  final Panda obd;
+  final double width, height;
+
+  @override
+  Widget build(BuildContext context) => Column(mainAxisSize: MainAxisSize.min, children: [
+        const Text('BRAKES', style: TextStyle(fontSize: 12, letterSpacing: 0.8, color: Colors.white70)),
+        const SizedBox(height: 8),
+        SizedBox(
+          width: width,
+          height: height,
+          child: CustomPaint(painter: _BrakeCross([...obd.brakeTempC], MediaQuery.textScalerOf(context))),
+        ),
+      ]);
+}
+
+class _BrakeCross extends CustomPainter {
+  _BrakeCross(this.temps, this.scaler);
+
+  final List<double?> temps;
+  final TextScaler scaler;
+
+  // An opaque grey as the Dash's axles (W38 over black).
+  static const _axle = Color(0xFF616161);
+
+  TextPainter _text(String s) => TextPainter(
+      text: TextSpan(
+          text: s,
+          style: const TextStyle(
+              fontFamily: kFont, fontSize: 16, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()])),
+      textScaler: scaler,
+      textDirection: TextDirection.ltr)
+    ..layout();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // A disc brake at each wheel, smaller than the cross is tall.
+    final room = _text('888°').width, s = min(30.0, size.height * 0.3), gap = 6.0;
+    final xs = [room + gap + s / 2, size.width - room - gap - s / 2], ys = [s / 2, size.height - s / 2];
+    final line = Paint()
+      ..color = _axle
+      ..strokeWidth = 1.5;
+    for (final y in ys) {
+      canvas.drawLine(Offset(xs[0] + s / 2, y), Offset(xs[1] - s / 2, y), line); // the axles
+    }
+    final mid = (xs[0] + xs[1]) / 2;
+    canvas.drawLine(Offset(mid, ys[0]), Offset(mid, ys[1]), line); // the spine
+    final icon = Paint()..color = Colors.white70;
+    for (var i = 0; i < 4; i++) {
+      final c = Offset(xs[i % 2], ys[i ~/ 2]);
+      // The disc, its caliper outward: turned right on the right, left on the left.
+      canvas
+        ..save()
+        ..translate(c.dx, c.dy)
+        ..rotate(i.isOdd ? pi / 2 : -pi / 2)
+        ..scale(s / 102)
+        ..drawPath(kDiscBrake, icon)
+        ..restore();
+      final v = temps[i], tp = _text(v == null ? '—' : _deg(v));
+      final x = i.isOdd ? c.dx + s / 2 + 4 : c.dx - s / 2 - 4 - tp.width; // outside: left of the left, right of the right
+      tp.paint(canvas, Offset(x, c.dy - tp.height / 2));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BrakeCross old) => !listEquals(old.temps, temps) || old.scaler != scaler;
+}
+
 /// The battery's health: the spread between the strongest and weakest cell
 /// group ([minor]: the full layout hides it unless switched on), and how far
 /// full-pack energy has fallen from the BMS's figure for it new.
@@ -2158,8 +2269,9 @@ class CarSeats extends StatelessWidget {
 /// its air temperature and fan as the screen sets it (the third row has no
 /// fan; a 5-seater's in the boot), and the seats: as the picture has them while empty or
 /// not yet heard, green once the belt is buckled, red while someone sits in
-/// it unbuckled (that row's figures then step aside). Not over Bluetooth,
-/// which has none of it; before the stream the saved pressures on the car.
+/// it unbuckled (that row's figures then step aside). Over Bluetooth its
+/// lights, the pressures and the front row's air (newer Commander firmware),
+/// no seats, fans or paths; before either the saved pressures on the car.
 class _Cabin extends StatelessWidget {
   const _Cabin({required this.obd, this.carHeight});
 
@@ -2179,7 +2291,6 @@ class _Cabin extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final o = obd;
-    if (o.viaBt) return const SizedBox.shrink();
     // Before the chime's frame, someone seated unbuckled would show plain.
     final live = o.wifiLive && o.frames.containsKey(0x3A1);
     final belt = live && o.anyBeltUnbuckled;
@@ -2260,8 +2371,8 @@ class _Cabin extends StatelessWidget {
             left: o.indL && o.blinkLit,
             right: o.indR && o.blinkLit,
             // The paths only under it: the layer over it does not repaint as the wheel turns.
-            steerDeg: beams ? o.steerDeg : null,
-            steerLines: beams && o.steerLines,
+            steerDeg: beams && o.wifiLive ? o.steerDeg : null, // WiFi's alone
+            steerLines: beams && o.wifiLive && o.steerLines,
             reverse: beams && o.gear == 'R',
             beams: beams));
     final picture = SizedBox(
@@ -2297,7 +2408,8 @@ class _Cabin extends StatelessWidget {
           if (o.cabinC2 != null && !rowUnbuckled(2)) row(pic.rows[1], o.cabinC2!, o.fan2),
           // A 5-seater's in the boot, should the car send one; no belts there.
           if (o.cabinC3 != null && !rowUnbuckled(3)) row(pic.rows[2], o.cabinC3!),
-        ],
+        ] else if (o.viaBt && o.btHas(159) && o.cabinC1 != null)
+          row(pic.rows[0], o.cabinC1!), // Bluetooth's one reading, no fan
       ]),
     );
     // Shrinks rather than overflows in the column beside the ring.
