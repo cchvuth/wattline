@@ -275,6 +275,27 @@ final _shots = <String, (Size, Panda Function())>{
     ..cabinC3 = 17
     ..fan1 = 'LOW'
     ..fan2 = 'OFF')),
+  // Plugged in at the charge limit, defrosting: the charger feeds part of it
+  // in the background (the capture's 11.2 kW frame first, so its three
+  // phases are known: OF 11), the battery the rest.
+  'plugged-at-limit': (const Size(823.5, 384), () => _seen(_car()
+    ..onFrame(0x264, 1, [0xD0, 0x1B, 0xA8, 0x70, 0xA0, 0x00]) // 235 V, 16 A a line, 11.2 kW: three phases
+    ..onFrame(0x264, 1, [0xD0, 0x5B, 0x8B, 0x20, 0xA0, 0x00]) // held at the limit: 3.2 kW
+    ..onFrame(0x132, 1, [0x70, 0x94, 0, 0, 0, 0]) // 380 V
+    ..onFrame(0x2A7, 1, [0, 0, 0x40, 0x24, 0, 0xF0, 0x05, 0]) // compressor 2.9 kW
+    ..packKw = 1.7
+    ..speed = 0
+    ..gear = 'P'
+    ..socPct = 80
+    ..rangeMi = 250
+    ..chargeLimitPct = 80
+    ..outsideC = 2
+    ..packTempC = 9
+    ..cabinC1 = 24
+    ..cabinC2 = 18
+    ..cabinC3 = 17
+    ..fan1 = 'HIGH'
+    ..fan2 = 'OFF')),
   // Beside Google Maps: traction control stepping in on a slushy junction.
   'compact-cold': (const Size(405, 384), () => _seen(_car()
     ..speed = 22
@@ -410,6 +431,43 @@ void main() {
     expect(find.image(const AssetImage('assets/car/car.png')), findsWidgets);
     await shot('basic-bt-3'); // the car
     await t.pumpWidget(const SizedBox());
+  });
+
+  // The basic layout plugged in at the limit: the energy card's plugged-in
+  // table, its figures without the draws (the table has the climate).
+  testWidgets('basic layout plugged in at the limit', (t) async {
+    SharedPreferences.setMockInitialValues({});
+    t.view
+      ..physicalSize = const Size(823.5, 384) * _dpr
+      ..devicePixelRatio = _dpr;
+    final key = GlobalKey(), car = _shots['plugged-at-limit']!.$2();
+    await t.pumpWidget(MaterialApp(
+        theme: kTheme,
+        debugShowCheckedModeBanner: false,
+        home: RepaintBoundary(
+            key: key,
+            child: DashPage(demo: car, basic: true, bt: Commander()..show(BtLink.lean, 'ready')))));
+    await t.pump(const Duration(milliseconds: 300));
+    await t.runAsync(() => Future.wait([
+          for (final e in find.byType(Image).evaluate()) precacheImage((e.widget as Image).image, e),
+        ]));
+    // 0x264 again: plugged in is 2 s fresh on the real clock, which the decode above runs on
+    car.onFrame(0x264, 1, [0xD0, 0x5B, 0x8B, 0x20, 0xA0, 0x00]);
+    await t.pump(const Duration(milliseconds: 300));
+    expect(find.text('PLUGGED IN · LIMIT 80 %'), findsOneWidget);
+    expect(find.text('WALL'), findsOneWidget);
+    expect(find.text('BATTERY'), findsOneWidget);
+    expect(find.text('CLIMATE'), findsOneWidget); // the table's, not the figures' as well
+    expect(find.text('12 V'), findsNothing);
+    expect(find.text('FROM THE WALL · OF 11'), findsOneWidget);
+    final out = Platform.environment['DASH_SHOT'];
+    if (out != null) {
+      await t.runAsync(() async {
+        final img = await (key.currentContext!.findRenderObject() as RenderRepaintBoundary).toImage(pixelRatio: _dpr);
+        final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
+        File('$out/basic-plugged.png').writeAsBytesSync(bytes!.buffer.asUint8List());
+      });
+    }
   });
 
   // The basic layout: the ring between two stacks of cards, one card of

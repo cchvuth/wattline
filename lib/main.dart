@@ -67,6 +67,7 @@ const kBasicBase = {
   0x399, 0x3F5, 0x286, 0x3F8, // limit, blind spots and assist, indicators, cruise set and gap
   0x321, // washer fluid low under the speed (and the air outside)
   0x212, 0x472, // charging: the centre's charge power and why it is capped
+  0x264, // the charger: plugged in (one ring, the wall's power in the centre)
 };
 const kBasicCards = <Set<int>>[
   {0x33A, 0x332, 0x352, 0x392, 0x3A1, 0x347, 0x333, 0x33B}, // energy: battery, pack heat, health, charge
@@ -1211,7 +1212,7 @@ class _DashPageState extends State<DashPage> {
   /// The full layout's figures under the battery: what the pack feeds besides
   /// the motors (WiFi) and its health; the air outside is by the ring.
   Widget _figures(Panda o) => Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        if (o.wifiLive && o.otherKw != null) _Draws(obd: o, minor: _minor),
+        if (o.wifiLive && o.otherKw != null && !o.plugged) _Draws(obd: o, minor: _minor), // plugged in: the card has the climate
         _Pack(obd: o, minor: _minor),
       ]);
 
@@ -1298,7 +1299,8 @@ class _DashPageState extends State<DashPage> {
         // All the draws and the pack's health, whatever the full
         // layout's switch says.
         Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (o.wifiLive && o.charging) _Charge(obd: o) else _Draws(obd: o),
+          if (o.wifiLive && o.charging || o.plugged) _Charge(obd: o) else _Draws(obd: o),
+          if (o.plugged) const SizedBox(height: 8), // the table's two parts apart, as the dash's
           _Pack(obd: o),
         ]),
       ])),
@@ -1454,8 +1456,18 @@ class _DashPageState extends State<DashPage> {
                         // figures do not jump. Charging (no g-meter): the dial,
                         // the charge and the figures together in the middle.
                         Expanded(
-                          child: o.wifiLive && o.charging
-                              ? _SideColumn(children: [_Battery(obd: o), _Charge(obd: o), _figures(o)])
+                          child: o.wifiLive && o.charging || o.plugged
+                              ? _SideColumn(children: [
+                                  _Battery(obd: o),
+                                  // plugged in: the card and the figures one table, one left edge
+                                  if (o.plugged)
+                                    Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                      _Charge(obd: o),
+                                      const SizedBox(height: 10),
+                                      _figures(o),
+                                    ])
+                                  else ...[_Charge(obd: o), _figures(o)],
+                                ])
                               // Bluetooth alone (no g-meter): under the figures the Dash's labelled
                               // pedal and the brakes' temperatures, in the room left. Not on a
                               // rear-motor car: as it was.
@@ -1547,6 +1559,8 @@ Widget _powerRing(Panda o, {required bool smooth, VoidCallback? onGear}) => Repa
           pedalPct: o.live ? o.pedalPct : null,
           brakePct: o.wifiLive ? o.brakePct : null, // WiFi's alone: frozen once it stalls
           regenCapKw: o.live && o.gear != 'P' ? o.regenMaxKw : null, // no regen parked
+          plugKw: o.plugged && o.gear == 'P' ? o.wallKw : null, // plugged in: one ring, the wall's power
+          plugMaxKw: o.wallMaxKw,
           child: _Centre(obd: o, onGear: onGear),
         ),
       ),
@@ -1625,7 +1639,7 @@ class _Compact extends StatelessWidget {
               child: SizedBox(height: 26, child: FittedBox(child: ap)),
             ),
           Expanded(
-              child: o.wifiLive && o.charging
+              child: o.wifiLive && o.charging || o.plugged
                   ? _Charge(obd: o, oneLine: true)
                   : _Nav(obd: o, bt: bt, oneLine: true)),
         ]),

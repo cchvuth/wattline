@@ -19,7 +19,13 @@ class _Centre extends StatelessWidget {
     final o = obd;
     // Charging in P: the power going in, where the speed would be.
     final charge = o.wifiLive && o.charging && o.gear == 'P' && o.chargeKw != null;
-    final cue = _cue(charge);
+    // Plugged in, not charging (held at the limit): the wall's power, what
+    // the charger feeds in the background. Plugged in at all, in P: one ring
+    // (RingGauge.plugKw), no limit sign.
+    final wk = o.wallKw; // read once: it goes null as 0x264 ages, between build and layout
+    final wall = !charge && o.gear == 'P' && wk != null;
+    final ring = o.gear == 'P' && wk != null;
+    final cue = _cue(charge, wall);
     return LayoutBuilder(
         builder: (context, c) => Stack(alignment: Alignment.center, children: [
           if (!gearOnly) ...[
@@ -33,19 +39,19 @@ class _Centre extends StatelessWidget {
               child: FittedBox(
                 fit: BoxFit.contain,
                 child: Text(
-                  charge ? o.chargeKw!.round().toString() : o.live ? o.speed.round().toString() : '—',
+                  charge ? o.chargeKw!.round().toString() : wall ? _kw(wk) : o.live ? o.speed.round().toString() : '—',
                   style: TextStyle(
                     fontSize: 200,
                     height: 1,
                     fontWeight: FontWeight.w200,
                     // Dim when there is no data, so the dash reads as a gap.
-                    color: charge ? kRegen : o.live ? Colors.white : Colors.white24,
+                    color: charge ? kRegen : wall || o.live ? Colors.white : Colors.white24,
                     fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 ),
               ),
             ),
-            Text(charge ? 'kW' : o.speedUnit,
+            Text(charge || wall ? 'kW' : o.speedUnit,
                 style: const TextStyle(
                     color: Colors.white60, letterSpacing: 3, fontSize: 15)),
           ],
@@ -66,7 +72,7 @@ class _Centre extends StatelessWidget {
             ),
           // The limit above the speed, scaled to the ring; the speed stays
           // centred between the kW readouts.
-          if (!gearOnly)
+          if (!gearOnly && !ring)
             Positioned(
               top: c.maxHeight * 0.1,
               child: SizedBox.square(
@@ -101,10 +107,18 @@ class _Centre extends StatelessWidget {
   /// why; else the cruise set speed and gap while cruise holds one; and the
   /// washer fluid low, amber: on its own in words, beside the cruise cue its
   /// drop alone. (A regen cap shows on the ring itself.)
-  Widget? _cue(bool charge) {
+  Widget? _cue(bool charge, bool wall) {
     final o = obd, washer = o.wifiLive && o.washerLow;
     const s = TextStyle(fontSize: 15, letterSpacing: 1, fontWeight: FontWeight.w600);
     const drop = GlyphIcon(Glyph.washer, size: 15, color: kWarn);
+    if (wall) {
+      // where it comes from, and what the plug gives
+      final max = o.wallMaxKw;
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('FROM THE WALL${max != null ? ' · OF ${max.round()}' : ''}', style: s.copyWith(color: Colors.white70)),
+        if (washer) ...[const SizedBox(width: 12), drop],
+      ]);
+    }
     if (charge) {
       final max = o.chargeMaxKw, why = o.chargeWhy;
       if (max != null || why != null) {
@@ -193,6 +207,9 @@ class _PagesState extends State<_Pages> {
 }
 
 /// The box, [by] larger all round.
+/// A small power with its tenth (3.2), a large one whole (11): the wall's.
+String _kw(double kw) => kw < 9.95 ? kw.toStringAsFixed(1) : kw.round().toString();
+
 class _Inflated extends CustomClipper<Rect> {
   const _Inflated(this.by);
 
@@ -218,8 +235,11 @@ class _Speedo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final o = obd, top = o.kph ? 250 : 160; // the arc's end: past the car's top speed, km/h or mph
-    // Charging in P: the power going in, where the speed would be.
+    // Charging in P: the power going in, where the speed would be; plugged
+    // in at the limit, the wall's.
     final charge = o.wifiLive && o.charging && o.gear == 'P' && o.chargeKw != null;
+    final wk = o.wallKw; // read once: it goes null as 0x264 ages, between build and layout
+    final wall = !charge && o.gear == 'P' && wk != null;
     return LayoutBuilder(builder: (context, c) {
       final side = min(c.maxWidth, c.maxHeight), r = RingGauge.radiusIn(side);
       // The last speed even with the link down: the needle hides, not falls.
@@ -249,16 +269,16 @@ class _Speedo extends StatelessWidget {
                         height: r * 0.24,
                         child: FittedBox(
                           child: Text(
-                              charge ? o.chargeKw!.round().toString() : o.live ? o.speed.round().toString() : '—',
+                              charge ? o.chargeKw!.round().toString() : wall ? _kw(wk) : o.live ? o.speed.round().toString() : '—',
                               style: TextStyle(
                                   fontSize: 100,
                                   height: 1,
                                   fontWeight: FontWeight.w300,
-                                  color: charge ? kRegen : o.live ? Colors.white : Colors.white24,
+                                  color: charge ? kRegen : wall || o.live ? Colors.white : Colors.white24,
                                   fontFeatures: const [FontFeature.tabularFigures()])),
                         ),
                       ),
-                      Text(charge ? 'kW' : o.speedUnit,
+                      Text(charge || wall ? 'kW' : o.speedUnit,
                           style: const TextStyle(color: Colors.white60, letterSpacing: 2, fontSize: 11)),
                     ]),
                   ),
@@ -1408,6 +1428,13 @@ class _Battery extends StatelessWidget {
               child: Text.rich(
                   TextSpan(text: pct == null ? '—' : '${pct.round()}', children: [
                     if (pct != null) const TextSpan(text: '%', style: TextStyle(fontSize: 16)),
+                    // plugged in and the battery still going down (the
+                    // charger short of the climate): its arrow
+                    if (pct != null && o.plugged && !o.charging && (o.packKw ?? 0) >= 0.3)
+                      const WidgetSpan(
+                          alignment: PlaceholderAlignment.middle,
+                          child: Padding(
+                              padding: EdgeInsets.only(left: 2), child: Icon(Icons.arrow_downward, size: 18, color: kAlert))),
                   ]),
                   style: TextStyle(
                       fontSize: 28,
@@ -2313,7 +2340,12 @@ class _Cabin extends StatelessWidget {
     // the body, the left more than the right).
     // Bigger figures widen the box about its centre and shrink to it.
     final f = fill ? _fillFigures : 1.0, tyreOut = carW * pic.tyreW * (f - 1) / 2;
-    Widget tyre(double? bar, double at, bool left) => Positioned(
+    // That wheel braking while the car moves (WiFi's torque): its brake % in
+    // red over it instead (at a standstill the held brake would hide them).
+    Widget tyre(double? bar, double at, bool left, String wheel) {
+      final bk = (o.wheelBrakePct(wheel) ?? 0).round();
+      final braked = bk >= 1 && o.speed > 0;
+      return Positioned(
           left: left ? carW * pic.tyreL - tyreOut : null,
           right: left ? null : carW * pic.tyreR - tyreOut,
           width: carW * pic.tyreW * f,
@@ -2322,19 +2354,21 @@ class _Cabin extends StatelessWidget {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Text(bar == null ? '—' : o.psi ? (bar * 14.5038).round().toString() : bar.toStringAsFixed(1),
+              Text(braked ? '$bk' : bar == null ? '—' : o.psi ? (bar * 14.5038).round().toString() : bar.toStringAsFixed(1),
                   style: TextStyle(
-                      color: Colors.white,
+                      color: braked ? kAlert : Colors.white,
                       fontSize: 14 * f,
                       height: 1.1,
                       fontWeight: FontWeight.w600,
                       fontFeatures: const [FontFeature.tabularFigures()],
                       shadows: const [Shadow(blurRadius: 3)])),
-              Text(o.psi ? 'psi' : 'bar',
-                  style: TextStyle(color: Colors.white60, fontSize: 9 * f, height: 1, shadows: const [Shadow(blurRadius: 3)])),
+              Text(braked ? '%' : o.psi ? 'psi' : 'bar',
+                  style: TextStyle(
+                      color: braked ? kAlert : Colors.white60, fontSize: 9 * f, height: 1, shadows: const [Shadow(blurRadius: 3)])),
             ]),
           ),
         );
+    }
     // A row's air and fan on a dark pill over its seats, centred on them. On
     // basic's card the air as big as a tyre's figure and the fan's word as
     // its "psi", so the two read alike.
@@ -2401,10 +2435,10 @@ class _Cabin extends StatelessWidget {
         ],
         // Its lights, past its ends into the room the padding leaves.
         if (o.live) lights(),
-        tyre(o.tpFL, pic.axles[0], true),
-        tyre(o.tpFR, pic.axles[0], false),
-        tyre(o.tpRL, pic.axles[1], true),
-        tyre(o.tpRR, pic.axles[1], false),
+        tyre(o.tpFL, pic.axles[0], true, 'brakeFL'),
+        tyre(o.tpFR, pic.axles[0], false, 'brakeFR'),
+        tyre(o.tpRL, pic.axles[1], true, 'brakeRL'),
+        tyre(o.tpRR, pic.axles[1], false, 'brakeRR'),
         // A row with a seat unbuckled leaves the red in full view.
         if (live) ...[
           // A row the car gives no air reading for shows none.
@@ -2463,7 +2497,9 @@ class _Draws extends StatelessWidget {
   }
 }
 
-/// While charging: to what % and by when, as the nav puts a route.
+/// While charging: to what % and by when, as the nav puts a route. Plugged
+/// in (charging or held at the limit): where the power goes, the wall, the
+/// climate and the battery, in the figures' columns (one table with them).
 /// WiFi only.
 class _Charge extends StatelessWidget {
   const _Charge({required this.obd, this.oneLine = false});
@@ -2474,16 +2510,35 @@ class _Charge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final o = obd;
-    if (!o.wifiLive || !o.charging) return const SizedBox.shrink();
+    final wk = o.wallKw, charging = o.wifiLive && o.charging, plug = wk != null; // (wallKw: plugged in, read once)
+    if (!charging && !plug) return const SizedBox.shrink();
     const big = TextStyle(fontSize: 18, color: Colors.white, fontFeatures: [FontFeature.tabularFigures()]);
     final pct = o.chargeLimitPct, m = o.chargeMinutes;
+    if (!charging) {
+      // held at the limit: the limit in the header (no sentence under it), then the table
+      final pk = o.packKw;
+      final head = pct == null ? 'PLUGGED IN' : 'PLUGGED IN · LIMIT $pct %';
+      if (oneLine) {
+        return FittedBox(fit: BoxFit.scaleDown, child: Text('${_kw(wk!)} kW from the wall${pct == null ? '' : ' · limit $pct %'}', style: big));
+      }
+      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        // one line: shrinks rather than wraps in a narrow column
+        FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(head,
+                maxLines: 1, softWrap: false, style: const TextStyle(fontSize: 12, letterSpacing: 1.5, color: Colors.white70))),
+        const SizedBox(height: 4),
+        _flows(context, o, wk!, pk),
+      ]);
+    }
     final to = pct == null ? null : 'to $pct %';
     final when = m == null
         ? null
         : '${m < 60 ? '$m min' : '${m ~/ 60}h ${m % 60}m'}   '
             '${TimeOfDay.fromDateTime(DateTime.now().add(Duration(minutes: m))).format(context)}';
-    if (to == null && when == null) return const SizedBox.shrink();
+    if (to == null && when == null && !plug) return const SizedBox.shrink();
     if (oneLine) {
+      if (to == null && when == null) return FittedBox(fit: BoxFit.scaleDown, child: Text('${_kw(wk!)} kW from the wall', style: big));
       return FittedBox(
           fit: BoxFit.scaleDown,
           child: Text([?to, ?when].join('   '), style: big));
@@ -2493,6 +2548,27 @@ class _Charge extends StatelessWidget {
       const SizedBox(height: 2),
       if (to != null) Text(to, style: big),
       if (when != null) FittedBox(fit: BoxFit.scaleDown, child: Text(when, style: big)),
+      if (plug) ...[const SizedBox(height: 4), _flows(context, o, wk, o.packKw)],
     ]);
   }
+
+  /// The wall, the climate, the battery: the battery red while it gives (it
+  /// covers what the wall does not), green while it takes.
+  /// One block, shrunk as a whole in a column too narrow for the longest value.
+  static Widget _flows(BuildContext context, Panda o, double wk, double? pk) => FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+        _statRow(context, 'WALL', '${wk.toStringAsFixed(1)} kW'),
+        _statRow(context, 'CLIMATE', o.climateKw == null ? '—' : '${o.climateKw!.toStringAsFixed(1)} kW'),
+        _statRow(
+            context,
+            'BATTERY',
+            pk == null
+                ? '—'
+                : pk.abs() < 0.05
+                    ? '0.0 kW'
+                    : '${pk > 0 ? '−' : '+'}${pk.abs().toStringAsFixed(1)} kW',
+            color: pk == null || pk.abs() < 0.05 ? Colors.white : pk > 0 ? kAlert : kRegen),
+      ]));
 }

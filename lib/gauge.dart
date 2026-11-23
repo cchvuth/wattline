@@ -45,10 +45,16 @@ class RingGauge extends StatefulWidget {
     this.rearOnly = false,
     this.pedalPct,
     this.brakePct,
+    this.plugKw,
+    this.plugMaxKw,
     required this.child,
   });
 
   final double? frontKw, rearKw, regenCapKw;
+  /// Plugged in, in P: the wall's power, and what the plug gives (null: 11
+  /// kW). Set, the two halves are one ring over the top, open 88° round the
+  /// gear, filling with it (no motors, no readouts): the dash's plug_ring.
+  final double? plugKw, plugMaxKw;
   final double maxKw, minKw;
   final bool rearOnly;
   final double? pedalPct, brakePct;
@@ -117,6 +123,8 @@ class _RingGaugeState extends State<RingGauge> {
             cap: w.regenCapKw,
             maxKw: w.maxKw,
             minKw: w.minKw,
+            plug: w.plugKw,
+            plugMax: w.plugMaxKw,
           ),
           child: Center(child: w.child),
         ),
@@ -157,9 +165,13 @@ class _RingPainter extends CustomPainter {
     required this.cap,
     required this.maxKw,
     required this.minKw,
+    this.plug,
+    this.plugMax,
   });
 
   final _Vals v;
+  final double? plug, plugMax;
+  static final _plugStart = _deg(134), _plugSweep = _deg(272);
   final (bool, bool) known;
   final bool rearOnly;
   final double? cap;
@@ -184,6 +196,16 @@ class _RingPainter extends CustomPainter {
       ..color = color;
     void arc(double start, double sweep, Color color) =>
         canvas.drawArc(rect, start, sweep, false, stroke(color));
+
+    // Plugged in: one ring, its track and the wall's power out of what the
+    // plug gives, and nothing else.
+    if (plug case final kw?) {
+      canvas.drawArc(rect, _plugStart, _plugSweep, false, stroke(Colors.white24)..strokeWidth = 1.5);
+      final max = (plugMax ?? 0) > 0 ? plugMax! : 11.0;
+      final f = (kw / max).clamp(0.0, 1.0);
+      if (f > 0) arc(_plugStart, _plugSweep * f, kRegen);
+      return;
+    }
 
     // Empty track: a hairline, so only the live fill reads as weight.
     for (final s in [_left, _right]) {
@@ -299,7 +321,7 @@ class _RingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RingPainter old) =>
-      old.v != v || old.known != known || old.cap != cap || old.rearOnly != rearOnly;
+      old.v != v || old.known != known || old.cap != cap || old.rearOnly != rearOnly || old.plug != plug || old.plugMax != plugMax;
 }
 
 void _label(Canvas canvas, String s, Offset at, double size, Color color,

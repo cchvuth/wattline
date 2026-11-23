@@ -144,6 +144,14 @@ class Panda extends ChangeNotifier {
   /// About what a 2 t car stopping at 0.6 g takes at its wheels; with the
   /// square root in [brakePct] it looks right in the car.
   static const brakeFullNm = 4000.0;
+
+  /// One wheel's brake ('brakeFL', 'brakeFR', 'brakeRL', 'brakeRR') as a %,
+  /// the brake car's scale (1000 Nm full, the square root as [brakePct]);
+  /// null without WiFi's frame. The dash's wheel_pct.
+  double? wheelBrakePct(String wheel) {
+    final nm = wifiLive ? _brakeNm[wheel] : null;
+    return nm == null ? null : sqrt((nm / 1000).clamp(0.0, 1.0)) * 100;
+  }
   double? socPct;
   double? rangeMi;
   double? speedLimit;
@@ -306,7 +314,29 @@ class Panda extends ChangeNotifier {
 
   // Charging.
   bool charging = false;
-  double? chargeKw, chargeMaxKw; // going in, and the most it takes now
+  double? chargeKw, chargeMaxKw; // going in (the wall's on AC, the pack's on DC), and the most it takes now
+  double? _chargePackKw; // 0x212: what reaches the pack, after the charger
+
+  // The charger (0x264): plugged in, charging or held at the limit (it still
+  // feeds the climate then, in the background). The dash's car_plugged and
+  // car_wall_max_kw.
+  double? chargeLineKw, chargeLineV, chargeLineA, chargeLimitA;
+  int? chargeAcOn; // AC at the port
+  DateTime? _lineAt;
+  int _phases = 0; // power / (V x A) while it draws 2 A a line or more; kept while plugged in, 0 unknown
+  bool get _lineFresh => _lineAt != null && DateTime.now().difference(_lineAt!).inMilliseconds < 2000;
+
+  /// Plugged in (WiFi's 0x264, fresh): charging or held at the limit.
+  bool get plugged => wifiLive && chargeAcOn == 1 && _lineFresh;
+
+  /// The wall's power while plugged in, kW.
+  double? get wallKw => plugged ? chargeLineKw : null;
+
+  /// What the plug gives: the line's voltage x the current allowed x the
+  /// phases, kW; null until the phases are known.
+  double? get wallMaxKw => plugged && _phases > 0 && chargeLineV != null && chargeLimitA != null
+      ? chargeLineV! * chargeLimitA! * _phases / 1000
+      : null;
   String? chargeWhy; // what holds it back: COLD PACK, CHARGER, FULL...
   int? chargeLimitPct, chargeMinutes;
 
@@ -455,6 +485,14 @@ class Panda extends ChangeNotifier {
     if (at(35) case final v?) packKwh = v * 0.02 < 30 || v * 0.02 > 150 ? null : v * 0.02;
     if (at(36) case final v?) packLeftKwh = v * 0.02 > 150 ? null : v * 0.02;
     if (at(37) case final v?) packBufferKwh = v * 0.01 > 20 ? null : v * 0.01;
+    // The car's own % as its screen shows it, (left - buffer) / (full -
+    // buffer), rounded down: the Commander's 111 counts the buffer in (a
+    // capture: 51.38 kWh left of 81.62, 3.67 buffer: the car 61 %, 111 said
+    // 62). Only from these three, each within its bounds above.
+    final full = packKwh, left = packLeftKwh, buf = packBufferKwh;
+    if (at(35) != null && at(36) != null && at(37) != null && full != null && left != null && buf != null && full > buf) {
+      socPct = ((left - buf) / (full - buf) * 100 + 1e-9).floorToDouble().clamp(0, 100).toDouble();
+    }
     if (at(43) case final v?) cellVMax = v * 0.002 > 5 ? null : v * 0.002;
     if (at(44) case final v?) cellVMin = v * 0.002 > 5 ? null : v * 0.002;
     if (z(27) case final v?) outsideC = v.toDouble(); // whole °C
@@ -945,6 +983,10 @@ class Panda extends ChangeNotifier {
     tcMode = chargeWhy = null;
     handsOn = followGap = chargeMinutes = null;
     cruiseSet = precondC = chargeKw = chargeMaxKw = regenMaxKw = null;
+    _chargePackKw = chargeLineKw = chargeLineV = chargeLineA = chargeLimitA = null;
+    chargeAcOn = null;
+    _lineAt = null;
+    _phases = 0;
     // Shown only while live, but the Commander's ACK alone makes a new link
     // live before the first frame: never with the last session's figures.
     speed = 0;
@@ -1022,6 +1064,7 @@ class Panda extends ChangeNotifier {
     0x2E5, 0x266, 0x33A, 0x332, 0x352, 0x392, // motor power, soc, cells, energy
     0x347, 0x238, 0x3FD, 0x321, 0x2F3, 0x25A, 0x273, // nav, outside, climate, tyres, tilt
     0x472, 0x333, 0x33B, // charging: reason, limit, time
+    0x264, // the charger: plugged in (charging or at the limit), the wall's power
     0x185, // brake torque, live for the ring's brake line
     0x219, 0x243, // not on this car's stream
   };
@@ -1676,8 +1719,29 @@ class Panda extends ChangeNotifier {
           followGap = v.round() + 1;
         case 'chargeStatus':
           charging = v == 3;
+        // the car's charging screen shows the wall's power on AC (the onboard
+        // charger's input), the pack's on DC (no charger in the way: 0x264
+        // reads 0); the wall's only while 0x264 is fresh
         case 'chargeKw':
-          chargeKw = v;
+          _chargePackKw = v;
+          chargeKw = (chargeLineKw ?? 0) > 0.5 && _lineFresh ? chargeLineKw : v;
+        case 'chargeLineKw':
+          chargeLineKw = v;
+          if (!_lineFresh) _phases = 0; // back after a gap: maybe another charger, its phases unknown
+          _lineAt = DateTime.now();
+          if (v > 0.5) {
+            chargeKw = v;
+          } else if (_chargePackKw != null) {
+            chargeKw = _chargePackKw;
+          }
+        case 'chargeLineV':
+          chargeLineV = v;
+        case 'chargeLineA':
+          chargeLineA = v;
+        case 'chargeLimitA':
+          chargeLimitA = v;
+        case 'chargeAcOn':
+          chargeAcOn = v.round();
         case 'chargeMaxKw':
           chargeMaxKw = v;
         case 'chargeWhy':
@@ -1686,6 +1750,18 @@ class Panda extends ChangeNotifier {
           chargeLimitPct = v.round();
         case 'chargeMinutes':
           chargeMinutes = v >= 2047 ? null : v.round();
+      }
+    }
+    // The charger's phases, once its whole frame is read: the power over one
+    // line's (V x A), while it draws enough to tell 1 from 3 (2 A); kept while
+    // plugged in (a draw that drops, at the limit, leaves the plug as it
+    // was), gone unplugged.
+    if (id == 0x264) {
+      final kw = chargeLineKw, v = chargeLineV, a = chargeLineA;
+      if (chargeAcOn == 0) {
+        _phases = 0;
+      } else if (kw != null && v != null && a != null && a >= 2 && v > 50 && kw > 0.3) {
+        _phases = (kw * 1000 / (v * a)).round().clamp(1, 3);
       }
     }
   }

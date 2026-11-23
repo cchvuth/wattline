@@ -119,7 +119,10 @@ const kSignals = <String, Sig>{
   // live capture (CD AC B3 DB FD FF E5 68 -> 205 mi, 235 Wh/mi, 59 %, 59 %),
   // where the DBC offsets decoded to nonsense. SOCUI292 on 0x292 is the
   // BMS figure and runs ~2 % above what the screen shows.
-  'soc': Sig(0x33A, 20, 7), // %
+  // The car's screen shows uSOE, the usable share: SOC (UI_soe) runs up to 1 %
+  // ahead of it (a trace, 2026-11-09 to 11-23: uSOE equal or 1 lower in every
+  // frame; 2026-11-23 14:35, SOC 62 / uSOE 61 while the car showed 61).
+  'soc': Sig(0x33A, 27, 7), // % (uSOE)
   'rangeMi': Sig(0x33A, 0, 10),
 
   // ID332 BMS_bmbMinMax, payload 1: highest and lowest brick (parallel cell
@@ -336,6 +339,17 @@ const kSignals = <String, Sig>{
   'chargeStatus': Sig(0x212, 11, 3),
   'chargeKw': Sig(0x212, 14, 16, scale: 0.05, sna: 65535),
   'chargeMaxKw': Sig(0x212, 39, 12, scale: 0.125, sna: 4095),
+  // ID264 PCS_chgLineStatus: the onboard charger's input, charging or held
+  // at the limit (it still feeds the climate then, in the background): the
+  // power from the wall as the car's charging screen shows it (0x212 is what
+  // reaches the pack, after the charger's losses), the line's voltage, its
+  // current, the current allowed, and AC at the port. A capture (D0 1B A8 70
+  // A0 00): 235 V, 16 A a line, 11.2 kW, 16 A allowed, AC on: three phases.
+  'chargeLineKw': Sig(0x264, 24, 8, scale: 0.1),
+  'chargeLineV': Sig(0x264, 0, 14, scale: 0.033),
+  'chargeLineA': Sig(0x264, 14, 9, scale: 0.1),
+  'chargeAcOn': Sig(0x264, 23, 1),
+  'chargeLimitA': Sig(0x264, 32, 10, scale: 0.1),
   // ID472 BMS_chargeInfo: what holds it back, as the car tells its owner.
   'chargeWhy': Sig(0x472, 32, 3),
   // ID333 UI_chargeRequest: the charge limit; ID33B: the minutes to it

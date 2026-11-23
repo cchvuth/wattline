@@ -88,6 +88,8 @@ void main() {
     final rangeSoc = [0xCD, 0xAC, 0xB3, 0xDB, 0xFD, 0xFF, 0xE5, 0x68];
     expect(decode(kSignals['rangeMi']!, rangeSoc), 205);
     expect(decode(kSignals['soc']!, rangeSoc), 59);
+    // the car's screen shows uSOE: 2026-11-23 14:35, SOC 62 / uSOE 61, the car 61
+    expect(decode(kSignals['soc']!, [0xC4, 0xF8, 0xE3, 0xEB, 0xFD, 0xFF, 0xE5, 0x68]), 61);
 
     // DI_gear 21|3 = 4 (D), DI_accelPedalPos 32|8 (0.4) = 0x64 -> 40%.
     final driving = [0, 0, 0x80, 0, 0x64, 0, 0, 0];
@@ -117,6 +119,13 @@ void main() {
     // 0x392 payload 1: pack new 78.8 kWh (raw 788 at bit 40). Payload 0 and
     // SNA (all ones) are not a figure.
     expect(decode(kSignals['packNewKwh']!, [0x01, 0, 0, 0, 0, 0x14, 0x03, 0]), closeTo(78.8, 1e-9));
+    // ID264 the charger, a capture while charging: 235 V, 16 A a line, 11.2
+    // kW from the wall, 16 A allowed, AC on (three phases)
+    expect(decode(kSignals['chargeLineKw']!, [0xD0, 0x1B, 0xA8, 0x70, 0xA0, 0x00]), closeTo(11.2, 1e-9));
+    expect(decode(kSignals['chargeLineV']!, [0xD0, 0x1B, 0xA8, 0x70, 0xA0, 0x00]), closeTo(234.96, 1e-9));
+    expect(decode(kSignals['chargeLineA']!, [0xD0, 0x1B, 0xA8, 0x70, 0xA0, 0x00]), closeTo(16, 1e-9));
+    expect(decode(kSignals['chargeAcOn']!, [0xD0, 0x1B, 0xA8, 0x70, 0xA0, 0x00]), 1);
+    expect(decode(kSignals['chargeLimitA']!, [0xD0, 0x1B, 0xA8, 0x70, 0xA0, 0x00]), closeTo(16, 1e-9));
     expect(decode(kSignals['packNewKwh']!, [0x00, 0, 0, 0, 0, 0x14, 0x03, 0]), isNull);
     expect(decode(kSignals['packNewKwh']!, [0x01, 0, 0, 0, 0, 0xFF, 0x03, 0]), isNull);
 
@@ -807,6 +816,11 @@ void main() {
     final p = Panda()..onFrame(0x185, 1, [0x14, 0x40, 0x01, 0x0A, 0xA0, 0x00, 0x54, 0xD9]);
     expect(p.brakePct, closeTo(sqrt(120 / Panda.brakeFullNm) * 100, 1e-9));
     expect(p.traceLine(), contains('brake Nm=120'));
+    // each wheel, the tyres' brake % (the brake car's 1000 Nm scale), WiFi's only
+    expect(p.wheelBrakePct('brakeFL'), isNull);
+    p.status = 'live';
+    expect(p.wheelBrakePct('brakeFL'), closeTo(sqrt(40 / 1000) * 100, 1e-9));
+    expect(p.wheelBrakePct('brakeRR'), closeTo(sqrt(20 / 1000) * 100, 1e-9));
     p.onFrame(0x185, 1, [0, 0, 0, 0, 0, 0, 0x04, 0x8A]);
     expect(p.brakePct, 0);
     // Past full: the ring's foot at its widest, no further. 0xFFE x2 each
