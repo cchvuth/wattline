@@ -64,9 +64,15 @@ test/dash_shot_test.dart` redraws them. The drive is `test/drive_video_test.dart
 (or an MP4 by `tools/frames_to_mp4.swift`).
 
 Buttons down both sides act on the car through the Commander, each door
-on its own side: trunk, mirror tilt and the charge port on the left,
-frunk, recirculation and interior lights on the right. The car controls
-(locks, honk, flash, climate) are under the car icon in the bottom bar.
+on its own side: trunk, mirror tilt, the charge port and the driver's seat
+massage on the left, frunk, recirculation, interior lights and the
+passenger's seat massage on the right. A massage button (L or R) offers
+Soft, Pulse and Hard, the running mode ticked; picked again, it stops.
+The car controls, under the car icon in the bottom bar, hold every S3XY
+function a Model 3 or Y has, in the S3XY app's groups and names
+(`lib/car_actions.dart`). Each can be pressed there or put on the dash in
+place of one of its twelve buttons (Add to home screen); Restore default
+buttons brings the dash's own back.
 
 **Basic layout** (picked at the first launch, a switch in the settings, or a
 tap on the gear under the speed, which swaps back too):
@@ -219,7 +225,8 @@ sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 | `lib/update.dart` | the in-app update from GitHub's releases (Android) |
 | `lib/changelog.dart` | what each release changed, shown after an update and in the settings: a release adds its entry |
 | `lib/glyphs.dart` | the car's icons, as vector paths |
-| `lib/car_panel.dart` | the car controls (the bottom bar's car icon) |
+| `lib/car_panel.dart` | the car controls (the bottom bar's car icon): every S3XY function, Execute or Add to home screen |
+| `lib/car_actions.dart` | every S3XY function (groups, names, ids, options), the dash's twelve button slots; the screens' table is generated from it |
 | `lib/diag.dart` | Diagnostics |
 
 [docs/signals-and-actions.md](docs/signals-and-actions.md) maps every value
