@@ -12,6 +12,17 @@ typedef Change = ({String version, String title, List<String> notes, List<String
 
 const kChangelog = <Change>[
   (
+    version: '1.7.0',
+    title: 'Every S3XY function',
+    notes: [
+      'Seat massage: an L and an R button for the front seats; a tap offers Soft, Pulse and Hard, the running one ticked, and picking it again stops it',
+      "Car controls: every S3XY function, in the S3XY app's groups and names; one with a choice offers it, the risky ones ask first",
+      'Add to home screen puts any of them on the dash in place of one of its twelve buttons; Restore default buttons brings them back',
+      'Bug fixes and improvements',
+    ],
+    shots: [],
+  ),
+  (
     version: '1.6.1',
     title: 'Save logs',
     notes: [
