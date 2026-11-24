@@ -11,9 +11,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'panda.dart' show Panda;
 
-/// S3XY functions the dash can press: the action's number (niklaswa's
-/// TeslaAction) and the state TryAction sends with it.
-enum S3xyAction {
+/// What a press sends: the action's number (niklaswa's TeslaAction), the
+/// state TryAction sends with it, and its name.
+mixin Press {
+  int get id;
+  int get state;
+  String get label;
+
+  /// Opens a closure: only in P, wherever it is pressed from.
+  bool get opens => id == 2 || id == 3 || id == 40;
+}
+
+/// S3XY functions the dash's own buttons press (every one: car_actions.dart).
+enum S3xyAction with Press {
   frunk(2, 0, 'Frunk'),
   trunk(3, 0, 'Trunk'),
   interiorLights(12, 0, 'Light'),
@@ -33,13 +43,22 @@ enum S3xyAction {
   flash(33, 6, 'Flash'), // high beam flash
   // Toggles climate on and off; needs the Commander's own link to the car,
   // which ScanMyTesla mode drops.
-  climate(70, 0, 'Climate');
-
-  /// Opens a closure: only in P, wherever it is pressed from.
-  bool get opens => id == 2 || id == 3 || id == 40;
+  climate(70, 0, 'Climate'),
+  // The front seats' lumbar massage (TeslaAction 98 driver, 99 passenger):
+  // state 3 soft, 2 pulse, 4 hard; the running mode pressed again stops it.
+  // The car ends it when a door opens or it shifts into P. Pulse and hard
+  // need two lumbar cushions.
+  massageLeftSoft(98, 3, 'Left Seat Massage: Soft'),
+  massageLeftPulse(98, 2, 'Left Seat Massage: Pulse'),
+  massageLeftHard(98, 4, 'Left Seat Massage: Hard'),
+  massageRightSoft(99, 3, 'Right Seat Massage: Soft'),
+  massageRightPulse(99, 2, 'Right Seat Massage: Pulse'),
+  massageRightHard(99, 4, 'Right Seat Massage: Hard');
 
   const S3xyAction(this.id, this.state, this.label);
+  @override
   final int id, state;
+  @override
   final String label;
 }
 
@@ -124,6 +143,11 @@ class Commander extends ChangeNotifier {
   /// only where the WiFi stream lacks the HVAC's frame (0x243, absent on the
   /// test car even with climate on).
   int? recircMode;
+
+  /// The front seats' massage (fields 130 driver, 131 passenger): low 7 bits
+  /// the mode as a press sends it (2 pulse, 3 soft, 4 hard; else off), top
+  /// bit an S3XY press. Cleared when the link drops.
+  int? massageLeft, massageRight;
 
   BluetoothDevice? _dev;
   BluetoothCharacteristic? _cmd;
@@ -225,7 +249,7 @@ class Commander extends ChangeNotifier {
   }
 
   /// Presses [a] once (TryAction).
-  Future<void> tryAction(S3xyAction a) async {
+  Future<void> tryAction(Press a) async {
     if (!ready) throw CommanderError(status);
     if (busy) throw CommanderError('busy — press again'); // a press, or the subscribe ([_refit])
     busy = true;
@@ -531,12 +555,13 @@ class Commander extends ChangeNotifier {
   /// What WiFi lacks: destination, miles, minutes and battery % at arrival
   /// (the S3XY Dash's nav card, none of it on the bus as such) and
   /// recirculation; then what the dash shows when WiFi is off.
-  static const _wifiLacks = [6, 7, 8, 9, 101];
+  static const _wifiLacks = [6, 7, 8, 9, 101, 130, 131];
   static const _allFields = [..._wifiLacks, ...Panda.btFields, ...Panda.btTraceFields];
 
-  /// Fields only recent Commander firmware has (the tyres, the cabin): left
-  /// out again should a Commander refuse a subscription naming them.
-  static const _newer = [132, 133, 134, 135, 159];
+  /// Fields only recent Commander firmware has (the seats' massage, the
+  /// tyres, the cabin): left out again should a Commander refuse a
+  /// subscription naming them.
+  static const _newer = [130, 131, 132, 133, 134, 135, 159];
 
   /// How much car data a session subscribes to: none (the buttons only),
   /// what WiFi lacks, or all of it. A subscription only adds, so a session
@@ -556,11 +581,11 @@ class Commander extends ChangeNotifier {
       pushInfo = 'buttons only: car data once the WiFi stream has settled';
       return;
     }
-    var (_, st) = replyStatus(sec.crypt(await _rpc(
-        cmd, sec.crypt(subscribeRequest(level == _lean ? _wifiLacks : _allFields)))));
-    if (st != 0 && level == _full) {
+    final fields = level == _lean ? _wifiLacks : _allFields;
+    var (_, st) = replyStatus(sec.crypt(await _rpc(cmd, sec.crypt(subscribeRequest(fields)))));
+    if (st != 0) {
       (_, st) = replyStatus(sec.crypt(await _rpc(
-          cmd, sec.crypt(subscribeRequest([for (final f in _allFields) if (!_newer.contains(f)) f])))));
+          cmd, sec.crypt(subscribeRequest([for (final f in fields) if (!_newer.contains(f)) f])))));
     }
     pushInfo = 'subscribed${level == _full ? '' : _wifiLive ? ' to the route and recirculation only (WiFi is live)' : ' to the route and recirculation only (WiFi was, just now)'}, '
         '${st < _statuses.length ? _statuses[st] : 'status $st'}';
@@ -715,6 +740,8 @@ class Commander extends ChangeNotifier {
       if (d[8] case final double m) navMinutes = m;
       if (d[9] case final double p) navArrivePct = p;
       if (d[101] case final int r) recircMode = r;
+      if (d[130] case final int m) massageLeft = m;
+      if (d[131] case final int m) massageRight = m;
       onData?.call(d);
       notifyListeners();
     } catch (_) {
@@ -740,7 +767,7 @@ class Commander extends ChangeNotifier {
     _cmd = null;
     navDest = null;
     navMiles = navMinutes = navArrivePct = null;
-    recircMode = null;
+    recircMode = massageLeft = massageRight = null;
     onData?.call(null);
     pushInfo = 'not connected';
     carLink = 'unknown';
@@ -937,7 +964,7 @@ List<int> sendUuidRequest(String id) =>
 /// ReqTryAction{PressActionConfig{action, switch type 1 (on/off), [state]}}.
 /// (niklaswa's Swift default, type 0 with state 1, is no recirculation
 /// function at all.)
-List<int> tryActionRequest(S3xyAction a) => [
+List<int> tryActionRequest(Press a) => [
       ..._u(1, 28),
       ..._b(39, _b(1, [..._u(1, a.id), ..._u(2, 1), ..._b(3, _varint(a.state))])),
     ];

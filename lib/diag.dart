@@ -66,6 +66,7 @@ String diagReport(Panda o, Commander? bt) {
           '${(bt?.pushFields.toList() ?? [])..sort()}')
       ..writeln('commander dash ${bt?.dash} [${bt?.dashInfoRaw}]')
       ..writeln('commander: ${bt?.status}  recirc ${bt?.recircMode}  '
+          'massage ${bt?.massageLeft} ${bt?.massageRight}  '
           'nav ${bt?.navMinutes} min ${bt?.navMiles} mi '
           '${bt?.navArrivePct} % ${bt?.navDest}')
       ..writeln()

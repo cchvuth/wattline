@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'car.dart';
+import 'car_actions.dart';
 import 'car_panel.dart';
 import 'changelog.dart';
 import 'commander.dart';
@@ -154,10 +155,16 @@ class _DashPageState extends State<DashPage> {
   void initState() {
     super.initState();
     _bt.onData = _obd.fromBt; // the Commander's data stands in for WiFi's
+    homeSlots.addListener(_slotsMoved); // a car panel action put on the dash
     if (widget.demo == null) _load();
   }
 
+  void _slotsMoved() {
+    if (mounted) setState(() {});
+  }
+
   Future<void> _load() async {
+    await loadHomeSlots();
     final prefs = await SharedPreferences.getInstance();
     _host = prefs.getString('host') ?? kDefaultHost;
     _port = prefs.getInt('port') ?? kDefaultPort;
@@ -822,6 +829,7 @@ class _DashPageState extends State<DashPage> {
 
   @override
   void dispose() {
+    homeSlots.removeListener(_slotsMoved);
     _traceTimer?.cancel();
     _btBack?.cancel();
     _btButtons?.cancel();
@@ -857,7 +865,7 @@ class _DashPageState extends State<DashPage> {
 
   /// Presses an S3XY function over Bluetooth. Frunk and trunk only in P: a
   /// lid rising at speed blinds the driver, whatever the car would allow.
-  Future<void> _press(S3xyAction a) async {
+  Future<void> _press(Press a) async {
     String? err;
     if (!_bt.ready) {
       _bt.kick(ask: true); // look now, and offer to switch Bluetooth on
@@ -868,10 +876,11 @@ class _DashPageState extends State<DashPage> {
           : _bt.dash && !_obd.live
               ? '${a.label}: no gear while the S3XY Dash has the car data (turn ScanMyTesla on)'
               : '${a.label}: gear unknown — no live data';
-    } else if (a == S3xyAction.mirrorTilt && const {'P', 'N', 'D'}.contains(_obd.gear)) {
+    } else if (a.id == 17 && const {'P', 'N', 'D'}.contains(_obd.gear)) {
       err = 'Mirror tilt acts in R only'; // S3XY: auto-tilt override, Reverse
     } else {
       _obd.pressed();
+      if (a.id == 98 || a.id == 99) massageStale[a.id - 98] = -2; // pressed: its reading counts again
       try {
         await _bt.tryAction(a);
       } catch (e) {

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_blue_plus_platform_interface/flutter_blue_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pointycastle/export.dart';
+import 'package:tesla_dash/car_actions.dart';
 import 'package:tesla_dash/commander.dart';
 
 /// The phone's Bluetooth, switched off: a dial gets as far as seeing that.
@@ -67,6 +68,8 @@ void main() {
     expect(tryActionRequest(S3xyAction.doorRearRight), hex('081cba02090a07082810011a0104'));
     expect(tryActionRequest(S3xyAction.unlock), hex('081cba02090a07083510011a0101'));
     expect(tryActionRequest(S3xyAction.flash), hex('081cba02090a07082110011a0106'));
+    expect(tryActionRequest(S3xyAction.massageLeftSoft), hex('081cba02090a07086210011a0103')); // 98, soft
+    expect(tryActionRequest(S3xyAction.massageRightHard), hex('081cba02090a07086310011a0104')); // 99, hard
     // Live captures (niklaswa/S3XYCommander tests) from here on.
     // SendUUID: "08 20 da02 28 0a26" then the 38-character id.
     final id = '{260ac2ce-a519-4f4f-b299-215c5c4b217a}';
@@ -129,6 +132,19 @@ void main() {
     c.dispose();
   });
 
+  test('the car panel: every S3XY function, the dash buttons among them', () {
+    for (final a in kCarActions) {
+      expect(a.options, isNotEmpty, reason: a.name);
+      for (var k = 0; k < a.options.length; k++) {
+        final p = a.press(k);
+        expect(tryActionRequest(p).sublist(0, 4), hex('081cba02'), reason: p.label);
+      }
+    }
+    for (final s in S3xyAction.values) {
+      expect(kCarActions.any((a) => a.id == s.id && a.options.any((o) => o.$2 == s.state)), isTrue, reason: s.name);
+    }
+  });
+
   test('trip figures from vehicle-data pushes', () {
     expect(subscribeRequest([6, 7, 8, 9]), hex('087cba08066a0406070809'));
     final c = Commander();
@@ -148,6 +164,9 @@ void main() {
     // Field 101, the Commander's recirculation reading (DashRecirc RECIRC).
     c.onPush(hex('0810ca0103a80601'));
     expect(c.recircMode, 1);
+    // Fields 130/131, the front seats' massage: soft, and hard from an S3XY press.
+    c.onPush(hex('0810ca010790080398088401'));
+    expect((c.massageLeft, c.massageRight), (3, 0x84));
   });
 
   test('the S3XY Dash on the Commander', () {

@@ -1068,12 +1068,12 @@ class _Controls extends StatelessWidget {
         ),
         IconButton(
           visualDensity: VisualDensity.compact,
-          // The car panel: locks, honk, flash, climate.
+          // The car panel: every S3XY function, in its groups.
           icon: const Icon(Icons.directions_car_outlined, color: Colors.white),
           tooltip: 'Car controls',
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(builder: (_) => CarPanel(bt: bt)),
+            MaterialPageRoute(builder: (_) => CarPanel(bt: bt, obd: obd)),
           ),
         ),
       ]);
@@ -1249,14 +1249,43 @@ class _RingPainter extends CustomPainter {
 /// S3XY functions, pressed over Bluetooth. Lit from the state the bus already
 /// reports over WiFi; dim while they cannot be pressed. Half down each side
 /// of the screen ([right] the right-hand one), each door on its own side.
+// Whether the car was in P and a door open at the last build (massageStale's
+// edges). ponytail: module state, one dash per app.
+var _massageInP = false, _massageDoor = false;
+
+/// [t] on two lines at the space nearest its middle (one line without a
+/// space).
+String _twoLines(String t) {
+  final mid = t.length / 2;
+  int? at;
+  for (var i = 0; i < t.length; i++) {
+    if (t[i] == ' ' && (at == null || (i - mid).abs() < (at - mid).abs())) at = i;
+  }
+  return at == null ? t : '${t.substring(0, at)}\n${t.substring(at + 1)}';
+}
+
 class _Actions extends StatelessWidget {
   const _Actions({required this.obd, required this.bt, required this.onTap, this.right = false});
 
   final Panda obd;
   final Commander bt;
-  final void Function(S3xyAction) onTap;
+  final void Function(Press) onTap;
   final bool right;
 
+
+  /// [items] in Flutter's own menu over the chip, [on] ticked; the chosen
+  /// one pressed.
+  Future<void> _pick(BuildContext context, List<(S3xyAction, String)> items, S3xyAction? on) async {
+    final box = context.findRenderObject()! as RenderBox;
+    final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final at = box.localToGlobal(Offset.zero, ancestor: overlay) & box.size;
+    final a = await showMenu<S3xyAction>(
+      context: context,
+      position: RelativeRect.fromRect(at, Offset.zero & overlay.size),
+      items: [for (final (a, t) in items) CheckedPopupMenuItem(value: a, checked: a == on, child: Text(t))],
+    );
+    if (a != null) onTap(a);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1268,8 +1297,11 @@ class _Actions extends StatelessWidget {
     // [note]: a figure under the icon, inside the chip's own size. [level]
     // 1 amber, 2 red: the figure, or on a lit chip the chip itself (dark
     // digits on its light fill would read as muted).
+    // [menu]: a tap offers these instead (the massage modes), [on] ticked;
+    // the chosen one pressed (the ticked one again stops it).
     Widget chip(S3xyAction a, Glyph icon, String label, bool lit,
-        {bool wifiOnly = false, String? note, int level = 0}) {
+        {bool wifiOnly = false, String? note, int level = 0, List<(S3xyAction, String)>? menu,
+        S3xyAction? on}) {
       lit = lit && (wifiOnly ? o.wifiLive : o.live);
       final fill = switch (level) { 2 => kAlert, 1 => kWarn, _ => kLit };
       final color = lit && level < 2 ? Colors.black : Colors.white;
@@ -1278,8 +1310,8 @@ class _Actions extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 3),
         child: Tooltip(
           message: label,
-          child: InkWell(
-            onTap: () => onTap(a),
+          child: Builder(builder: (context) => InkWell(
+            onTap: menu == null ? () => onTap(a) : () => _pick(context, menu, on),
             borderRadius: BorderRadius.circular(20),
             child: Container(
               height: 42,
@@ -1310,7 +1342,7 @@ class _Actions extends StatelessWidget {
                       ),
                     ]),
             ),
-          ),
+          )),
         ),
       );
     }
@@ -1322,8 +1354,63 @@ class _Actions extends StatelessWidget {
     final co2Level = co2 == null ? 0 : co2 >= 2500 ? 2 : co2 >= 1500 ? 1 : 0;
     // Once a figure has come, its slot stays, blank through a WiFi stall.
     final co2Note = o.co2ppm == null ? null : '${co2 ?? ''}';
+    // [side] under the seat: L or R, which seat it is. The car ends the
+    // massage when a door opens or it shifts into P: the reading then set
+    // aside until it moves or the seat is pressed (massageStale), so a 0 the
+    // Commander might leave out of its push leaves no chip lit.
+    // Each its own edge: a door opened in P ends it too.
+    final p = o.gear == 'P', door = o.doorFL || o.doorFR || o.doorRL || o.doorRR;
+    if ((p && !_massageInP) || (door && !_massageDoor)) massageStale.setAll(0, [bt.massageLeft, bt.massageRight]);
+    _massageInP = p;
+    _massageDoor = door;
+    Widget massage(int? v, List<(S3xyAction, String)> modes, String label, String side) {
+      final k = modes.first.$1.id - 98;
+      // A new reading counts again; none (the link dropped) is not one.
+      if (v != null && massageStale[k] != v) massageStale[k] = -2;
+      if (massageStale[k] == v) v = null;
+      final on = [for (final (a, _) in modes) if (a.state == (v ?? 0) & 0x7F) a].firstOrNull;
+      return chip(modes.first.$1, Glyph.massage, label, on != null, menu: modes, on: on, note: side);
+    }
+
+    // A car panel action put in a slot's place (homeSlots): its name in the
+    // chip, two lines at most; a tap presses it as the car panel's Execute
+    // does (its choice first, a risky one asked).
+    Widget custom(CarAction a) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 3),
+          child: Tooltip(
+            message: '${a.group}: ${a.name}',
+            child: Builder(builder: (context) => InkWell(
+              onTap: () => runCarAction(context, a, (p) async => onTap(p)),
+              borderRadius: BorderRadius.circular(20),
+              child: Container(
+                height: 42,
+                width: 52,
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white70),
+                ),
+                // Two lines at most, broken at the space nearest the middle,
+                // never inside a word: a line too wide shrinks to fit.
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(_twoLines(a.name),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 10, height: 1.1, color: Colors.white)),
+                ),
+              ),
+            )),
+          ),
+        );
+    // Each slot its own button unless an action was put there.
+    List<Widget> slots(int first, List<Widget> own) => [
+          for (var k = 0; k < own.length; k++)
+            if (carActionAt(homeSlots.value[first + k]) case final a?) custom(a) else own[k],
+        ];
+
     return Column(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [
-      if (!right) ...[
+      if (!right) ...slots(0, [
         chip(S3xyAction.trunk, Glyph.trunk, 'Trunk', o.trunk),
         // Outside R: the screen's Mirror Auto Tilt (0x273), which a tilt
         // press overrides in R. In R: whether the mirrors are dipped (0x102),
@@ -1338,7 +1425,14 @@ class _Actions extends StatelessWidget {
         // Lit while the charge port door is open (CP_status).
         chip(S3xyAction.chargePort, Glyph.chargePort, 'Charge port', o.chargePort,
             wifiOnly: true),
-      ] else ...[
+        // The seat's lumbar massage: a tap offers its modes, the running
+        // one ticked and the chip lit (the Commander's own reading).
+        massage(bt.massageLeft, const [
+          (S3xyAction.massageLeftSoft, 'Soft'),
+          (S3xyAction.massageLeftPulse, 'Pulse'),
+          (S3xyAction.massageLeftHard, 'Hard'),
+        ], 'Left Seat Massage', 'L'),
+      ]) else ...slots(6, [
         chip(S3xyAction.frunk, Glyph.frunk, 'Frunk', o.frunk),
         // Lit while most of the air is recirculated (the HVAC controller,
         // 0x243); without that frame the Commander's Bluetooth reading
@@ -1360,7 +1454,12 @@ class _Actions extends StatelessWidget {
         chip(S3xyAction.interiorLights, Glyph.interiorLight, 'Interior lights',
             o.domeLight == 'ON' || o.mapLight,
             wifiOnly: true),
-      ],
+        massage(bt.massageRight, const [
+          (S3xyAction.massageRightSoft, 'Soft'),
+          (S3xyAction.massageRightPulse, 'Pulse'),
+          (S3xyAction.massageRightHard, 'Hard'),
+        ], 'Right Seat Massage', 'R'),
+      ]),
     ]);
   }
 }

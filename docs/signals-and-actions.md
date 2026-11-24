@@ -346,7 +346,7 @@ Some actions need the Commander added as a key to the car; their notes say so (`
 | Front left seat cooling | 44 | 0 = cycle 3 > 2 > 1 > off, 4 = max on / off toggle | 44 (TeslaAction.frontSeatVentLeft) | Needs the Commander paired as a car key. Needs ventilated seats. |
 | Front right seat cooling | 45 | 0 = cycle 3 > 2 > 1 > off, 4 = max on / off toggle | 45 (TeslaAction.frontSeatVentRight) | Needs the Commander paired as a car key. Needs ventilated seats. |
 | Steering wheel heater | 23 | 0 = toggle on/off | 23 (TeslaAction.steeringWheelHeat) | It does not need the Commander paired as a car key. Needs a wheel heater. Tesla's screen does not show the change. |
-| Seat massage | 98/99 | unknown | 98 / 99 (niklaswa TeslaAction.leftSeatMassage / rightSeatMassage) | No TryAction states are known. Confidence: inferred (id only). |
+| Seat massage | 98/99 | 3 = soft, 2 = pulse, 4 = hard; the running mode pressed again stops it | 98 / 99 (niklaswa TeslaAction.leftSeatMassage / rightSeatMassage) | Driver 98, passenger 99. The car ends it when a door opens or it shifts into P; pulse and hard need two lumbar cushions. Bluetooth: Commander fields 130 (driver) / 131 (passenger), uint32: low 7 bits = the mode as pressed, bit 7 = from an S3XY press (to confirm on the car). Confidence: states as the S3XY app's own Soft/Hard/Pulse send them; the reading and the stop to confirm on the car. |
 
 ## Lights
 
