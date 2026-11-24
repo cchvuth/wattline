@@ -173,7 +173,8 @@ and the recirculation state. Only tested with the Commander so far.
 
 Diagnostics (the WiFi icon › Diagnostics) lists every CAN id seen, the decoded values
 and the Bluetooth state. Its top bar shares the trace log, copies its end to the
-clipboard, or clears it.
+clipboard, or clears it. The trace log (a line a second, Android) is written only
+with **Save logs** on (Settings › Advanced); off, the default, the app keeps no log.
 
 ## Build
 

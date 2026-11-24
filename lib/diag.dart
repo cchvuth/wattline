@@ -96,9 +96,13 @@ String _idHex(int id) => '0x${id.toRadixString(16).toUpperCase().padLeft(3, '0')
 // land on each other (append seeks once, at open).
 Future<void> _traceQueue = Future.value();
 
+/// Settings, Advanced, "Save logs": off (the default), nothing is written to
+/// the trace log, not even an export's report.
+bool traceOn = false;
+
 /// Adds [text] to the trace log, rolling it to trace.log.1 past 50 MB. A full
 /// or missing folder loses the text and nothing else.
-Future<void> traceWrite(File f, String text) => _traceQueue = _traceQueue.then((_) async {
+Future<void> traceWrite(File f, String text) => !traceOn ? _traceQueue : _traceQueue = _traceQueue.then((_) async {
       try {
         if (await f.exists() && await f.length() > 50 << 20) await f.rename('${f.path}.1');
         await f.writeAsString(text, mode: FileMode.append);
@@ -137,9 +141,9 @@ Future<bool> clearTrace() async {
 }
 
 /// The trace log with [report] added: the one file the share sheet, Copy log
-/// and adb all read. Null where there is none (not Android).
+/// and adb all read. Null where there is none (not Android, or logs off).
 Future<File?> traceExport(String report) async {
-  final f = await traceLog();
+  final f = traceOn ? await traceLog() : null;
   if (f == null) return null;
   await traceWrite(f, '${DateTime.now().toIso8601String()} export:\n$report\n');
   return f;
@@ -234,7 +238,7 @@ class _DiagPageState extends State<DiagPage> {
       appBar: AppBar(
         title: const Text('Diagnostics'),
         actions: [
-          if (Platform.isAndroid)
+          if (Platform.isAndroid && traceOn)
             IconButton(
               icon: const Icon(Icons.ios_share),
               tooltip: 'Share the trace log (every second, all drives)',

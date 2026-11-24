@@ -858,6 +858,8 @@ void main() {
         .setMockMethodCallHandler(const MethodChannel('tesla_dash/net'), null));
     File('${dir.path}/trace.log').writeAsStringSync(
         [for (var i = 0; i < 400; i++) '2026-11-06T10:00:00 line $i ${'x' * 90}'].join('\n'));
+    traceOn = true; // Save logs on
+    addTearDown(() => traceOn = false);
     final f = await traceExport('REPORT');
     final t = traceTail(f!, bytes: 5000)!;
     expect(t.length, lessThan(5100));
@@ -877,6 +879,8 @@ void main() {
         .setMockMethodCallHandler(const MethodChannel('tesla_dash/net'), null));
     final f = File('${dir.path}/trace.log'), old = File('${f.path}.1')..writeAsStringSync('OLD');
     diagBuild = 'BUILD';
+    traceOn = true; // Save logs on
+    addTearDown(() => traceOn = false);
     traceWrite(f, 'QUEUED\n');
     expect(await clearTrace(), isTrue);
     await traceWrite(f, 'NEXT\n'); // the running trace carries on
@@ -886,6 +890,22 @@ void main() {
     expect(t, contains('cleared: build=BUILD'));
     expect(t, endsWith('NEXT\n'));
     expect(await clearTrace(), isTrue); // and again with less to delete
+  });
+
+  test('with logs off nothing is written, not even an export\'s report', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final dir = Directory.systemTemp.createTempSync('trace');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('tesla_dash/net'), (call) async => call.method == 'logDir' ? dir.path : null);
+    addTearDown(() => TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(const MethodChannel('tesla_dash/net'), null));
+    expect(traceOn, isFalse); // the default
+    final f = File('${dir.path}/trace.log');
+    await traceWrite(f, 'LINE\n');
+    expect(await traceExport('REPORT'), isNull);
+    expect(await clearTrace(), isTrue); // clearing old drives still works, and writes no "cleared" line
+    expect(f.existsSync(), isFalse);
   });
 
   test('BT motor power from a Commander that still reads the old layout is dropped', () {

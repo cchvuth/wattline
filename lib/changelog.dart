@@ -12,6 +12,15 @@ typedef Change = ({String version, String title, List<String> notes, List<String
 
 const kChangelog = <Change>[
   (
+    version: '1.6.1',
+    title: 'Save logs',
+    notes: [
+      'Settings, Advanced: Save logs. Off (the default), the app keeps no log at all; on, the trace log as before',
+      'Bug fixes and improvements',
+    ],
+    shots: [],
+  ),
+  (
     version: '1.6.0',
     title: 'Plugged in',
     notes: [

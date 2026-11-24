@@ -126,6 +126,7 @@ class _DashPageState extends State<DashPage> {
   // Defaults: the owner's tuned settings from the car.
   int _settleMs = 3000, _buttonsMs = 500, _rejoinMs = 2000, _backMs = 15000;
   bool _wifiFirst = true; // Bluetooth waits for the WiFi stream, however long
+  bool _saveLogs = false; // the trace log: off, nothing written (traceOn)
   bool _smooth = false; // the power ring and pedal line glide on every change
   bool _minor = false; // the full layout's 12 V, other power and cell imbalance (off by default; basic shows them)
   late bool _basic = widget.basic; // basic layout: the ring between two stacks of big cards
@@ -167,6 +168,7 @@ class _DashPageState extends State<DashPage> {
     _rejoinMs = prefs.getInt('btRejoinMs') ?? _rejoinMs;
     _backMs = prefs.getInt('btBackMs') ?? _backMs;
     _wifiFirst = prefs.getBool('btWifiFirst') ?? _wifiFirst;
+    traceOn = _saveLogs = prefs.getBool('saveLogs') ?? _saveLogs;
     _smooth = prefs.getBool('smoothRing') ?? _smooth;
     _minor = prefs.getBool('minorFigures') ?? _minor;
     _basic = prefs.getBool('basic') ?? _basic;
@@ -340,12 +342,13 @@ class _DashPageState extends State<DashPage> {
 
   Future<void> _startTrace() async {
     // ponytail: Android only; iOS would need path_provider and a file-sharing key.
-    if (defaultTargetPlatform != TargetPlatform.android) return;
+    if (defaultTargetPlatform != TargetPlatform.android || !_saveLogs) return;
     final f = await traceLog();
     if (f == null || !mounted) return; // no folder (tests): no trace
     _traceFile = f;
     await loadBuild();
-    if (!mounted) return;
+    if (!mounted || !_saveLogs) return; // switched off meanwhile
+    _traceTimer?.cancel(); // switched off and on again meanwhile: one timer
     _trace('start: build=$diagBuild sparse=$_sparse car=${_obd.car.id} wifiFirst=$_wifiFirst look=${_lookMs}ms settle=${_settleMs}ms buttons=${_buttonsMs}ms '
         'data=${_rejoinMs}ms back=${_backMs}ms');
     _traceTimer = Timer.periodic(const Duration(seconds: 1), (t) {
@@ -353,6 +356,11 @@ class _DashPageState extends State<DashPage> {
       // Twice a minute the whole Diagnostics report and every signal.
       if (t.tick % 30 == 0 && (_obd.frames.isNotEmpty || _obd.viaBt)) _trace('${_obd.traceDump()}\n${diagReport(_obd, _bt)}');
     });
+  }
+
+  void _stopTrace() {
+    _traceTimer?.cancel();
+    _traceTimer = null;
   }
 
   void _trace(String line) => traceWrite(_traceFile!, '${DateTime.now().toIso8601String()} $line\n');
@@ -995,7 +1003,7 @@ class _DashPageState extends State<DashPage> {
                   const SizedBox(height: 8),
                   group(redraw, 'connection', 'Connection', null, Icons.wifi),
                   group(redraw, 'car', 'Car', '${_obd.car.label}, ${_basic ? 'basic' : 'full'} layout', Icons.directions_car_outlined),
-                  group(redraw, 'advanced', 'Advanced', 'Polling and Bluetooth timing', Icons.tune),
+                  group(redraw, 'advanced', 'Advanced', 'Polling, Bluetooth timing and logs', Icons.tune),
                   const SizedBox(height: 8),
                   // The rest, as links: onto a second line rather than off a narrow screen.
                   Align(
@@ -1158,6 +1166,13 @@ class _DashPageState extends State<DashPage> {
                     // so this fallback has nothing to time.
                     gap('Bluetooth back if no WiFi stream', _backMs, 30, 'btBackMs',
                         (v) => _backMs = v, redraw, on: !_wifiFirst),
+                    // Off, the phone keeps no log at all (none in memory either):
+                    // the Diagnostics page shows the live report only.
+                    if (defaultTargetPlatform == TargetPlatform.android)
+                      toggle('Save logs (trace.log, a line a second, for reading a drive afterwards)', _saveLogs, (v) {
+                        traceOn = _saveLogs = v;
+                        v ? _startTrace() : _stopTrace();
+                      }, redraw, key: 'saveLogs'),
                 ],
             })),
           ),
