@@ -31,6 +31,7 @@ enum Glyph {
   cruise,
   washer,
   massage,
+  defrost,
 }
 
 class GlyphIcon extends StatelessWidget {
@@ -107,6 +108,25 @@ class _GlyphPainter extends CustomPainter {
           (Offset(19.2, 9), Offset(21.4, 10.2)),
         ]) {
           canvas.drawLine(a, b, line);
+        }
+      case Glyph.defrost:
+        // The front defrost: the windscreen, three heat waves rising through
+        // it.
+        canvas.drawPath(
+            Path()
+              ..moveTo(2.6, 8.6)
+              ..quadraticBezierTo(12, 2.4, 21.4, 8.6)
+              ..lineTo(18.8, 19)
+              ..quadraticBezierTo(12, 16.4, 5.2, 19)
+              ..close(),
+            line);
+        for (final x in const [8.4, 12.0, 15.6]) {
+          canvas.drawPath(
+              Path()
+                ..moveTo(x, 15.4)
+                ..quadraticBezierTo(x - 1.5, 13.6, x, 11.8)
+                ..quadraticBezierTo(x + 1.5, 10, x, 8.2),
+              line);
         }
       case Glyph.massage:
         canvas

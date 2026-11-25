@@ -254,7 +254,8 @@ final _shots = <String, (Size, Panda Function())>{
     ..fan2 = '1'
     ..buckled.addAll({'D', 'P', '2L', '3R'})
     ..belt2R = true)),
-  // A Supercharger in the cold: the pack still warming holds it back.
+  // A Supercharger in the cold: the pack still warming holds it back, the
+  // windscreen defrosting.
   'charging': (const Size(823.5, 384), () => _seen(_car()
     ..speed = 0
     ..gear = 'P'
@@ -274,7 +275,8 @@ final _shots = <String, (Size, Panda Function())>{
     ..cabinC2 = 18
     ..cabinC3 = 17
     ..fan1 = 'LOW'
-    ..fan2 = 'OFF')),
+    ..fan2 = 'OFF'
+    ..defog = 'DEFROST')), // the windscreen clearing while it charges
   // Plugged in at the charge limit, defrosting: the charger feeds part of it
   // in the background (the capture's 11.2 kW frame first, so its three
   // phases are known: OF 11), the battery the rest.
@@ -295,7 +297,8 @@ final _shots = <String, (Size, Panda Function())>{
     ..cabinC2 = 18
     ..cabinC3 = 17
     ..fan1 = 'HIGH'
-    ..fan2 = 'OFF')),
+    ..fan2 = 'OFF'
+    ..defog = 'DEFROST')),
   // Beside Google Maps: traction control stepping in on a slushy junction.
   'compact-cold': (const Size(405, 384), () => _seen(_car()
     ..speed = 22

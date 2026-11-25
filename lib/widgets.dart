@@ -1920,13 +1920,15 @@ class _Lights extends StatelessWidget {
           ]),
         );
     final grip = o.wifiLive && o.frames.containsKey(0x2B6) && (o.gripLit || o.tcMode != null);
-    // Four lamps where three fitted: shrinks rather than overflows.
+    // Five lamps where three fitted: shrinks rather than overflows.
     return FittedBox(fit: BoxFit.scaleDown, child: Row(mainAxisSize: MainAxisSize.min, children: [
       // Not after the link: a stall would leave them lit.
       if (o.live && o.drl == true) lamp('DRL', Glyph.drl),
       if (o.live && o.lowBeam == true) lamp('LOW', Glyph.lowBeam),
       if (o.live && o.highBeam == true) lamp('HIGH', Glyph.highBeam, kAccent),
       if (grip) lamp(o.tcMode ?? 'GRIP', Glyph.grip, o.gripLit && !o.gripHeld ? kCold : kWarn),
+      // The windscreen's defog or defrost while it runs (the screen's setting).
+      if (o.live && o.defog != null) lamp(o.defog!, Glyph.defrost),
     ]));
   }
 }

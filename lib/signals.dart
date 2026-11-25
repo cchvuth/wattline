@@ -326,6 +326,9 @@ const kSignals = <String, Sig>{
   'autoBlower': Sig(0x2F3, 5, 3),
   'fan1': Sig(0x2F3, 16, 4),
   'fan2': Sig(0x2F3, 29, 3),
+  // The windscreen's defog / defrost as the screen sets it
+  // (UI_hvacDefogState: 0 NONE, 1 DEFOG, 2 DEFROST, 3 AUTO_DEFOG).
+  'defog': Sig(0x2F3, 24, 2),
   // ID399 DAS_status: the hands-on nag (DAS_autopilotHandsOnState; 15 SNA).
   'handsOn': Sig(0x399, 42, 4),
   // ID286 DI_locStatus: cruise 2 enabled, 3 standstill, 4 overridden; the

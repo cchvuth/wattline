@@ -149,6 +149,13 @@ void main() {
     // 0x273 byte 6: 0x20 is Mirror Auto Tilt; 0x1F is only its neighbours.
     expect(decode(kSignals['tiltAuto']!, [0, 0, 0, 0, 0, 0, 0x20, 0]), 1);
     expect(decode(kSignals['tiltAuto']!, [0, 0, 0, 0, 0, 0, 0x1F, 0]), 0);
+    // 0x2F3 bits 24-25: the windscreen's defog state (2 DEFROST); the
+    // Commander's 98 without WiFi (an S3XY press: bit 7), auto defog dark.
+    expect(decode(kSignals['defog']!, [0, 0, 0, 0x02, 0, 0, 0, 0]), 2);
+    final p = Panda()..fromBt({98: 0x81});
+    expect(p.defog, 'DEFOG');
+    p.fromBt({98: 3});
+    expect(p.defog, isNull);
   });
 
   test('Panda holds nothing stale and picks the right source', () {
