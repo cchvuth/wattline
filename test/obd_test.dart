@@ -156,6 +156,13 @@ void main() {
     expect(p.defog, 'DEFOG');
     p.fromBt({98: 3});
     expect(p.defog, isNull);
+    // On CAN: 2 DEFROST, 1 DEFOG, 3 (auto) dark.
+    final c = Panda()..onFrame(0x2F3, 0, [0, 0, 0, 0x02, 0, 0, 0, 0]);
+    expect(c.defog, 'DEFROST');
+    c.onFrame(0x2F3, 0, [0, 0, 0, 0x01, 0, 0, 0, 0]);
+    expect(c.defog, 'DEFOG');
+    c.onFrame(0x2F3, 0, [0, 0, 0, 0x03, 0, 0, 0, 0]);
+    expect(c.defog, isNull);
   });
 
   test('Panda holds nothing stale and picks the right source', () {
