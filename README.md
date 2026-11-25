@@ -10,6 +10,9 @@ Juniper (2025 on), 5 or 7 seats, rear- or all-wheel drive; tested on a
 7-seater. The Model 3 (2024 on) and the 6-seat Model Y L can be picked too,
 each with its own picture and lights; not yet tried in either. Flutter; Android first, iOS works too.
 
+The same dash runs on a car screen too (the SRNUBI T313D and the S3XY Dash),
+from a memory card: see [cchvuth/wattline-embedded](https://github.com/cchvuth/wattline-embedded).
+
 ![The dash on a cold morning: signalling right, ice on the road, a cold pack capping regen, a third-row seat unbuckled](docs/screenshots/cold-morning.png)
 
 ![A 15 s drive (demo data): pulling away to 60 km/h, a right turn on regen with the path lines, then the brake](docs/screenshots/drive.gif)
