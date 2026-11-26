@@ -1,7 +1,7 @@
 # Wattline
 
 [![Downloads](https://img.shields.io/github/downloads/cchvuth/wattline/total?label=downloads)](https://github.com/cchvuth/wattline/releases)
-[![Latest release downloads](https://img.shields.io/github/downloads/cchvuth/wattline/latest/total?label=latest%20release)](https://github.com/cchvuth/wattline/releases/latest)
+[![Release](https://img.shields.io/github/v/release/cchvuth/wattline?label=release)](https://github.com/cchvuth/wattline/releases/latest)
 
 A landscape driver's display for a phone mounted behind the wheel of a
 Tesla Model Y, fed by an Enhauto **S3XY Commander** or any Panda-protocol
